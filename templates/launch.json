@@ -1,0 +1,18 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug (LinkServer)",
+      "cwd": "${workspaceFolder}",
+      "type": "cortex-debug",
+      "preLaunchTask": "linkserver",
+      "request": "launch",
+      "servertype": "external",
+      "gdbTarget": "localhost:3333",
+      "executable": "${workspaceFolder}/build/zephyr/zephyr.elf",
+      "gdbPath": "<ZEPHYR_SDK_PATH>/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb.exe",
+      "overrideLaunchCommands": ["monitor reset halt", "load", "monitor reset halt"],
+      "overrideRestartCommands": ["monitor reset halt"]
+    }
+  ]
+}

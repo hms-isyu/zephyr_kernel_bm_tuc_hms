@@ -1,1 +1,3 @@
 build*/
+pyocd.yaml
+.vscode/
