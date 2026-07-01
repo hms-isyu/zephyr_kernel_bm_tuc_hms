@@ -14,11 +14,15 @@
 /* The devicetree node identifier for the "led0" alias. */
 #define LED0_NODE DT_ALIAS(led1)
 
+/* out7 -> J8 physical pin 28 (FlexIO LCD_D15, gpio4 23). */
+#define OUT7_NODE DT_NODELABEL(out7)
+
 /*
  * A build error on this line means your board is unsupported.
  * See the sample documentation for information on how to fix this.
  */
 static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
+static const struct gpio_dt_spec out7 = GPIO_DT_SPEC_GET(OUT7_NODE, gpios);
 
 int main(void)
 {
@@ -30,6 +34,17 @@ int main(void)
 	}
 
 	ret = gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
+	if (ret < 0) {
+		return 0;
+	}
+
+	/* Drive J8 pin 28 HIGH. out7 is GPIO_ACTIVE_HIGH, so OUTPUT_ACTIVE = high. */
+	if (!gpio_is_ready_dt(&out7)) {
+		printf("Something went wrong!");
+		return 0;
+	}
+
+	ret = gpio_pin_configure_dt(&out7, GPIO_OUTPUT_ACTIVE);
 	if (ret < 0) {
 		return 0;
 	}
