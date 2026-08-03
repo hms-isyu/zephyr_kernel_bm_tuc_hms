@@ -1,3 +1,5 @@
 build*/
 pyocd.yaml
 .vscode/
+packages/
+mcux_include.json
