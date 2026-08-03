@@ -1,0 +1,51 @@
+{
+  "version": 7,
+  "cmakeMinimumRequired": {
+    "major": 3
+  },
+  "configurePresets": [
+    {
+      "name": "build",
+      "displayName": "build",
+      "generator": "Ninja",
+      "binaryDir": "${fileDir}/${presetName}",
+      "cacheVariables": {
+        "APP_DIR": {
+          "value": "${fileDir}",
+          "type": "PATH"
+        },
+        "BOARD": "frdm_mcxn947/mcxn947/cpu0",
+        "CMAKE_BUILD_TYPE": "build",
+        "ZEPHYR_BASE": "c:/Users/isyu/Work/Projects/benchmarks/zephyr-ws/zephyr",
+        "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "$env{binaryDir}",
+        "CMAKE_LIBRARY_OUTPUT_DIRECTORY": "$env{binaryDir}",
+        "CMAKE_ARCHIVE_OUTPUT_DIRECTORY": "$env{binaryDir}"
+      },
+      "inherits": [
+        "build-env"
+      ],
+      "toolchainFile": ""
+    },
+    {
+      "name": "CMakePresets.json",
+      "displayName": "Custom configure preset",
+      "description": "Sets Ninja generator, build and install directory",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "build",
+      "displayName": "build",
+      "configurePreset": "build"
+    }
+  ],
+  "include": [
+    "mcux_include.json"
+  ]
+}
