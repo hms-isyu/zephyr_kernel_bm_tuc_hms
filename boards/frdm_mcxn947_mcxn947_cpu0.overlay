@@ -1,37 +1,343 @@
-/* J8 is the FlexIO/LCD header. Release the pads by disabling the FlexIO LCD
- * node that owns them (only actually claims them when the LCD shield is present,
- * but keep it explicit). No pinctrl group is needed for plain GPIO: the MCX GPIO
- * driver rewrites each pad's mux to FUNC0/GPIO in gpio_pin_configure(), so it
- * takes the pad regardless of any peripheral's default pinmux. */
+/*
+ * Minimal devicetree for the ETX/Zephyr benchmark on FRDM-MCXN947 (cpu0).
+ *
+ * The benchmark only needs:
+ *   - the three on-board LEDs, reached through the led0/led1/led2 aliases the
+ *     board already defines: gpio0 (red P0_10, green P0_27) and gpio1 (blue P1_2),
+ *   - the kernel timer (SysTick, already the board default; os_timer is off),
+ *   - RAM to run from.
+ *
+ * Everything else the board enables by default is switched off so no extra
+ * driver init, peripheral clock or interrupt source can perturb a measurement.
+ */
+
+/ {
+    /*
+     * Replaced wholesale instead of property by property: the board points
+     * zephyr,console / shell-uart / uart-mcumgr at LPUART4, zephyr,canbus at
+     * flexcan0 and zephyr,code-partition at internal flash, none of which
+     * exist in this build.
+     *
+     * The led0/led1/led2 aliases come from the board dtsi already, so there is
+     * deliberately no /aliases override here.
+     */
+    /delete-node/ chosen;
+
+    chosen {
+        zephyr,sram = &sram0;
+        zephyr,flash = &sramx;
+    };
+};
+
+/* Memory configuration */
+
+/* Code is linked into SRAMX (CONFIG_XIP=n), so the MPU must treat it as flash. */
+&sramx {
+    zephyr,memory-attr = <DT_MEM_ARM(ATTR_MPU_FLASH)>;
+};
+
+/* LEDs - the only hardware the benchmark drives */
+
+/*
+ * red_led and green_led are enabled by the board already; blue_led is left
+ * disabled there because P1_2 is also Arduino D6.
+ *
+ * No pinctrl group is needed for plain GPIO: the MCX GPIO driver rewrites each
+ * pad's mux to FUNC0/GPIO in gpio_pin_configure(), so it takes the pad
+ * regardless of any peripheral's default pinmux.
+ */
+&blue_led {
+    status = "okay";
+};
+
+/*
+ * GPIO ports carrying an LED. Kept explicit: disabling gpio0 is what broke the
+ * previous build ('__device_dts_ord_19' undeclared), since both the red and the
+ * green LED hang off it.
+ */
+&gpio0 {
+    status = "okay";
+};
+
+&gpio1 {
+    status = "okay";
+};
+
+/* Unused GPIO ports (Arduino, MikroBus and SD-card headers). */
+&gpio2 {
+    status = "disabled";
+};
+
+&gpio3 {
+    status = "disabled";
+};
+
+&gpio4 {
+    status = "disabled";
+};
+
+&gpio5 {
+    status = "disabled";
+};
+
+&user_button_2 {
+    status = "disabled";
+};
+
+/*
+ * PORT pinmux blocks. Each gpio node points at one via nxp,kinetis-port, so
+ * porta (gpio0) and portb (gpio1) must stay; the rest only existed for the
+ * ports disabled above.
+ */
+&portc {
+    status = "disabled";
+};
+
+&portd {
+    status = "disabled";
+};
+
+&porte {
+    status = "disabled";
+};
+
+&portf {
+    status = "disabled";
+};
+
+/* LPFLEXCOMM instances - no serial console (CONFIG_SERIAL=n), no I2C, no SPI */
+
+&flexcomm1 {
+    status = "disabled";
+};
+
+&flexcomm1_lpspi1 {
+    status = "disabled";
+};
+
+&flexcomm2 {
+    status = "disabled";
+};
+
+&flexcomm2_lpi2c2 {
+    status = "disabled";
+};
+
+&flexcomm2_lpuart2 {
+    status = "disabled";
+};
+
+&flexcomm3 {
+    status = "disabled";
+};
+
+&flexcomm3_lpi2c3 {
+    status = "disabled";
+};
+
+&flexcomm4 {
+    status = "disabled";
+};
+
+&flexcomm4_lpuart4 {
+    status = "disabled";
+};
+
+&flexcomm6 {
+    status = "disabled";
+};
+
+&flexcomm7 {
+    status = "disabled";
+};
+
+&flexcomm7_lpi2c7 {
+    status = "disabled";
+};
+
+/* DMA, mailbox and inter-core */
+
+&edma0 {
+    status = "disabled";
+};
+
+&smartdma {
+    status = "disabled";
+};
+
+&mbox {
+    status = "disabled";
+};
+
+&sema42 {
+    status = "disabled";
+};
+
+/* External QSPI flash */
+
+&flexspi {
+    status = "disabled";
+};
+
+&ext_flash_ctrl {
+    status = "disabled";
+};
+
+&w25q64jvssiq {
+    status = "disabled";
+};
+
+/* Analog */
+
+&dac0 {
+    status = "disabled";
+};
+
+&dac2 {
+    status = "disabled";
+};
+
+&lpadc0 {
+    status = "disabled";
+};
+
+&vref {
+    status = "disabled";
+};
+
+&opamp0 {
+    status = "disabled";
+};
+
+/* Ethernet */
+
+&enet {
+    status = "disabled";
+};
+
+&enet_mac {
+    status = "disabled";
+};
+
+&enet_mdio {
+    status = "disabled";
+};
+
+&phy {
+    status = "disabled";
+};
+
+/* Timers and counters other than the kernel's SysTick */
+
+&wwdt0 {
+    status = "disabled";
+};
+
+&ctimer0 {
+    status = "disabled";
+};
+
+&lptmr0 {
+    status = "disabled";
+};
+
+&mrt0_channel0 {
+    status = "disabled";
+};
+
+&rtc {
+    status = "disabled";
+};
+
+&sc_timer {
+    status = "disabled";
+};
+
+&flexpwm1_pwm0 {
+    status = "disabled";
+};
+
+/* Buses and interfaces */
+
+&flexcan0 {
+    status = "disabled";
+};
+
+&i3c1 {
+    status = "disabled";
+};
+
+&usdhc0 {
+    status = "disabled";
+};
+
+&usb1 {
+    status = "disabled";
+};
+
+&usbphy1 {
+    status = "disabled";
+};
+
+/*
+ * FlexIO. J8 is the FlexIO/LCD header; disabling flexio0_lcd releases those
+ * pads (it only actually claims them with the LCD shield present, but keep it
+ * explicit).
+ */
+&flexio0 {
+    status = "disabled";
+};
+
 &flexio0_lcd {
     status = "disabled";
 };
 
-/ {
-    j8_connector: j8-connector {
-        compatible = "nxp,gpio-nexus";
-        #gpio-cells = <2>;
-        gpio-map-mask = <0xffffffff 0xffffffc0>;
-        gpio-map-pass-thru = <0 0x3f>;
-        gpio-map = <0 0 &gpio4 16 0>,   /* J8 pin 21, LCD_D8  */
-                   <1 0 &gpio4 17 0>,   /* J8 pin 22, LCD_D9  */
-                   <2 0 &gpio4 18 0>,   /* J8 pin 23, LCD_D10 */
-                   <3 0 &gpio4 19 0>,   /* J8 pin 24, LCD_11  */
-                   <4 0 &gpio4 20 0>,   /* J8 pin 25, LCD_D12 */
-                   <5 0 &gpio4 21 0>,   /* J8 pin 26, LCD_13  */
-                   <6 0 &gpio4 22 0>,   /* J8 pin 27, LCD_D14 */
-                   <7 0 &gpio4 23 0>;   /* J8 pin 28, LCD_D15 */
-    };
+/* Touch */
 
-    gpio_bank: gpio-bank {
-        compatible = "gpio-leds";
-        out0: out0 { gpios = <&j8_connector 0 GPIO_ACTIVE_HIGH>; };
-        out1: out1 { gpios = <&j8_connector 1 GPIO_ACTIVE_HIGH>; };
-        out2: out2 { gpios = <&j8_connector 2 GPIO_ACTIVE_HIGH>; };
-        out3: out3 { gpios = <&j8_connector 3 GPIO_ACTIVE_HIGH>; };
-        out4: out4 { gpios = <&j8_connector 4 GPIO_ACTIVE_HIGH>; };
-        out5: out5 { gpios = <&j8_connector 5 GPIO_ACTIVE_HIGH>; };
-        out6: out6 { gpios = <&j8_connector 6 GPIO_ACTIVE_HIGH>; };
-        out7: out7 { gpios = <&j8_connector 7 GPIO_ACTIVE_HIGH>; };
-    };
+&tsi0 {
+    status = "disabled";
+};
+
+/* Audio */
+
+&sai0 {
+    status = "disabled";
+};
+
+&sai1 {
+    status = "disabled";
+};
+
+/* Memory error injection and reporting (the board enables these by default) */
+
+&eim0 {
+    status = "disabled";
+};
+
+&eim0_channel0 {
+    status = "disabled";
+};
+
+&eim0_channel2 {
+    status = "disabled";
+};
+
+&eim0_channel3 {
+    status = "disabled";
+};
+
+&eim0_channel4 {
+    status = "disabled";
+};
+
+&eim0_channel5 {
+    status = "disabled";
+};
+
+&eim0_channel6 {
+    status = "disabled";
+};
+
+&erm0 {
+    status = "disabled";
 };
