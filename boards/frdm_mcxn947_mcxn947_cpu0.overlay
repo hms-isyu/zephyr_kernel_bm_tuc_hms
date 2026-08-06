@@ -1,13 +1,7 @@
 /*
  * Minimal devicetree for the ETX/Zephyr benchmark on FRDM-MCXN947 (cpu0).
  *
- * The benchmark only needs:
- *   - the three on-board LEDs, reached through the led0/led1/led2 aliases the
- *     board already defines: gpio0 (red P0_10, green P0_27) and gpio1 (blue P1_2),
- *   - the kernel timer (SysTick, already the board default; os_timer is off),
- *   - RAM to run from.
- *
- * Everything else the board enables by default is switched off so no extra
+ * Everything the board enables by default is switched off (besides leds) so no extra
  * driver init, peripheral clock or interrupt source can perturb a measurement.
  */
 
@@ -22,18 +16,6 @@
      * deliberately no /aliases override here.
      */
     /delete-node/ chosen;
-
-    chosen {
-        zephyr,sram = &sram0;
-        zephyr,flash = &sramx;
-    };
-};
-
-/* Memory configuration */
-
-/* Code is linked into SRAMX (CONFIG_XIP=n), so the MPU must treat it as flash. */
-&sramx {
-    zephyr,memory-attr = <DT_MEM_ARM(ATTR_MPU_FLASH)>;
 };
 
 /* LEDs - the only hardware the benchmark drives */

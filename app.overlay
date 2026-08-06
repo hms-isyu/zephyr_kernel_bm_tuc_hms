@@ -1,0 +1,23 @@
+/ {
+	/*
+	 * Replaced wholesale instead of property by property: the board points
+	 * zephyr,console / shell-uart / uart-mcumgr at LPUART4, zephyr,canbus at
+	 * flexcan0 and zephyr,code-partition at internal flash, none of which
+	 * exist in this build.
+	 *
+	 * The led0/led1/led2 aliases come from the board dtsi already, so there is
+	 * deliberately no /aliases override here.
+	 */
+
+	chosen {
+		zephyr,sram = &sram0;
+		zephyr,flash = &sramx;
+	};
+};
+
+/* Memory configuration */
+
+/* Code is linked into SRAMX (CONFIG_XIP=n), so the MPU must treat it as flash. */
+&sramx {
+	zephyr,memory-attr = <DT_MEM_ARM(ATTR_MPU_FLASH)>;
+};
