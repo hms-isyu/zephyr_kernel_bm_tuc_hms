@@ -1,11 +1,11 @@
-Language: Cpp
-BasedOnStyle: LLVM
+Language:        Cpp
+BasedOnStyle:    LLVM
 AlignAfterOpenBracket: Align
 AlignConsecutiveAssignments: true
 AlignConsecutiveBitFields: false
 AlignConsecutiveDeclarations: true
 AlignEscapedNewlines: Right
-AlignOperands: true
+AlignOperands:   true
 AlignTrailingComments: true
 AllowAllArgumentsOnNextLine: true
 AllowAllConstructorInitializersOnNextLine: true
@@ -26,20 +26,20 @@ BraceWrapping:
   AfterControlStatement: true
   AfterClass: true
   AfterCaseLabel: true
-  AfterEnum: true
-  AfterFunction: true
-  AfterNamespace: false
+  AfterEnum:       true
+  AfterFunction:   true
+  AfterNamespace:  false
   AfterObjCDeclaration: false
-  AfterStruct: true
-  AfterUnion: true
+  AfterStruct:     true
+  AfterUnion:      true
   AfterExternBlock: true
-  BeforeCatch: true
-  BeforeElse: true
-  IndentBraces: false
+  BeforeCatch:     true
+  BeforeElse:      true
+  IndentBraces:    false
   SplitEmptyFunction: false
   SplitEmptyRecord: false
   SplitEmptyNamespace: false
-BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeBinaryOperators:  NonAssignment
 BreakBeforeBraces: Custom
 BreakBeforeInheritanceComma: false
 BreakInheritanceList: BeforeColon
@@ -47,24 +47,24 @@ BreakBeforeTernaryOperators: true
 BreakConstructorInitializersBeforeComma: false
 BreakAfterJavaFieldAnnotations: false
 BreakStringLiterals: true
-ColumnLimit: 120
+ColumnLimit:     80
 CompactNamespaces: false
 ConstructorInitializerAllOnOneLineOrOnePerLine: false
-ConstructorInitializerIndentWidth: 4
-ContinuationIndentWidth: 4
+ConstructorInitializerIndentWidth: 2
+ContinuationIndentWidth: 2
 Cpp11BracedListStyle: true
 DeriveLineEnding: true
 DerivePointerAlignment: false
-DisableFormat: false
+DisableFormat:   false
 ExperimentalAutoDetectBinPacking: false
 FixNamespaceComments: false
-IncludeBlocks: Preserve
+IncludeBlocks:   Preserve
 IndentCaseBlocks: true
 IndentCaseLabels: false
 IndentGotoLabels: true
-IndentWidth: 4
-TabWidth: 4
-UseTab: Never
+IndentWidth:     2
+TabWidth:        2
+UseTab:          Never
 IndentWrappedFunctionNames: false
 JavaScriptQuotes: Leave
 JavaScriptWrapImports: true

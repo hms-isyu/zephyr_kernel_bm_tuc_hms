@@ -1,0 +1,2 @@
+source "Kconfig.zephyr"
+rsource "packages/benchmark_hms/Kconfig"

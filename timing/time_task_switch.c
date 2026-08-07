@@ -11,144 +11,175 @@
 #include <stdio.h>
 #include <zephyr/kernel.h>
 
-#include "benchmark_common.h"
-#include "benchmark_tools.h"
+#include "benchmark_tools_hms.h"
 
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
 
 #define THREAD_STACK_SIZE 512
-#define IDLE_THREAD_PRIORITY 3
-#define LOW_PRIO_THREAD_PRIORITY 2
+#define IDLE_THREAD_PRIORITY 4
+#define LOW_PRIO_THREAD_PRIORITY 3
 #define HIGH_PRIO_THREAD_PRIORITY 1
+#define S3_HIGH_PRIO_THREAD_PRIORITY 2
 
-#define MEASUREMENT_COUNT (50000U) /* number of iterations to run for the actual measurement */
+#define MEASUREMENT_COUNT                                                      \
+  (50000U) /* number of iterations to run for the actual measurement */
 
 /* Signals multiplexed onto the single test_event object. */
-#define SCENARIO_1_EVENT_MASK 0x0001U      /* L_Task -> H_Task: S1_A stop marker, the measured switch */
-#define SCENARIO_3_EVENT_MASK 0x0002U      /* never posted: S3_A probes wait API cost */
-#define SIGNALIZE_YIELD_EVENT_MASK 0x0004U /* H_Task -> I_Task: iteration complete, re-arm L_Task */
-#define START_EVENT_MASK 0x0008U           /* H_Task -> L_Task: measurement may begin */
+#define SCENARIO_1_EVENT_MASK                                                  \
+  0x0001U /* L_Task -> H_Task: S1_A stop marker, the measured switch */
+#define SCENARIO_3_EVENT_MASK                                                  \
+  0x0002U /* never posted: S3_A probes wait API cost */
+#define SIGNALIZE_YIELD_EVENT_MASK                                             \
+  0x0004U /* H_Task -> I_Task: iteration complete, re-arm L_Task */
+#define START_EVENT_MASK 0x0008U /* H_Task -> L_Task: measurement may begin */
 
 /*******************************************************************************
  * Variables
  ******************************************************************************/
 
-uint32_t temp_cyccnt_read = 0; /* ETX.h */
+static BMTH_time_marker_t test_start_time = 0U;
+static BMTH_time_marker_t test_stop_time  = 0U;
 
-/* General t0, t1 measurement markers*/
-static volatile uint32_t test_start_time        = 0U; /* time taken to run the benchmark loop, measured at runtime */
-static volatile uint32_t test_stop_time         = 0U; /* time taken to run the benchmark loop, measured at runtime */
-static uint32_t          test_a_s1_time         = 0U; /* time taken to run the benchmark loop, measured at runtime */
-static uint32_t          test_a_s3_time         = 0U; /* time taken to run the benchmark loop, measured at runtime */
-static uint32_t          test_a_s1_time_min     = 0U; /* time taken to run the benchmark loop, measured at runtime */
-static uint32_t          test_a_s1_time_max     = 0U; /* time taken to run the benchmark loop, measured at runtime */
-static uint32_t          test_a_s1_time_outlier = 0U; /* time taken to run the benchmark loop, measured at runtime */
-static uint32_t          plus1                  = 0U;
-static uint32_t          plus2                  = 0U;
+static BMTH_measurement_series_t scenario_1 = {
+  .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
+static BMTH_measurement_series_t scenario_3 = {
+  .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
+
 /* Possible overhead values measurement */
-static uint32_t       test_dwta_ov = 0U; /* loop overhead in cycles, measured at runtime */
-static uint32_t       test_loop_ov = 0U;
-static volatile float scenario_1_a, scenario_3_a;
+static uint32_t test_dwta_ov =
+  0U; /* loop overhead in cycles, measured at runtime */
 
 struct k_event test_event;
 
 K_THREAD_STACK_DEFINE(idle_stack, THREAD_STACK_SIZE);
 K_THREAD_STACK_DEFINE(low_prio_stack, THREAD_STACK_SIZE);
 K_THREAD_STACK_DEFINE(high_prio_stack, THREAD_STACK_SIZE);
+K_THREAD_STACK_DEFINE(s3_high_prio_stack, THREAD_STACK_SIZE);
 
 static struct k_thread idle_thread;
 static struct k_thread low_prio_thread;
 static struct k_thread high_prio_thread;
+static struct k_thread s3_high_prio_thread;
+
+/*******************************************************************************
+ * Prototypes
+ ******************************************************************************/
+
+extern void measure_epilogue_tail_overhead(BMTH_measurement_series_t *mseries,
+                                           uint32_t loop_count,
+                                           uint32_t options);
 
 /*******************************************************************************
  * Code
  ******************************************************************************/
 
 // /* Low Prio Task*/
-static void L_Task(void *p1, void *p2, void *p3)
+static void L_Task_S1(void *p1, void *p2, void *p3)
 {
-    ARG_UNUSED(p1);
-    ARG_UNUSED(p2);
-    ARG_UNUSED(p3);
-    k_event_wait_safe(&test_event, START_EVENT_MASK, false, K_FOREVER); /* Started? */
-    while (1)
-    {
-        BENCHMARK_reset_counter();
-        BENCHMARK_GET_START_TIME(test_start_time);
-        k_event_post(&test_event, SCENARIO_1_EVENT_MASK);
-        k_thread_suspend(k_current_get());
-    }
+  ARG_UNUSED(p1);
+  ARG_UNUSED(p2);
+  ARG_UNUSED(p3);
+  k_event_wait_safe(&test_event, START_EVENT_MASK, false,
+                    K_FOREVER); /* Started? */
+  while (1)
+  {
+    BMTH_RESET_COUNTER();
+    BMTH_GET_START_CNT(test_start_time); /* S1 */
+    k_event_post(&test_event, SCENARIO_1_EVENT_MASK);
+    k_thread_suspend(k_current_get());
+  }
 }
 
 // /* High Prio Task*/
-static void H_Task(void *p1, void *p2, void *p3)
+static void H_Task_S1(void *p1, void *p2, void *p3)
 {
-    k_event_post(&test_event, START_EVENT_MASK); /*signalize start*/
-    while (1)
+  ARG_UNUSED(p1);
+  ARG_UNUSED(p2);
+  ARG_UNUSED(p3);
+  k_event_post(&test_event, START_EVENT_MASK); /* Start */
+  while (1)
+  {
+    k_event_wait_safe(&test_event, SCENARIO_1_EVENT_MASK, false,
+                      K_FOREVER); /* S1 */
+    BMTH_GET_STOP_CNT(test_stop_time);
+    if (!BMTH_mseries_iterate(&scenario_1, test_start_time, test_stop_time))
     {
-        k_event_wait_safe(&test_event, SCENARIO_1_EVENT_MASK, false, K_FOREVER); /* S1_A */
-        BENCHMARK_GET_STOP_TIME(test_stop_time);                                 /* S1_A */
-        test_stop_time = test_stop_time - test_start_time - test_dwta_ov;        /* S1_A */
-        test_a_s1_time += test_stop_time;                                        /* S1_A */
-        if (test_a_s1_time_min == 0U)
-        {
-            test_a_s1_time_min = test_stop_time;
-        }
-        else if (test_stop_time != test_a_s1_time_min)
-        {
-            test_a_s1_time_outlier++;
-            // BENCHMARK_signal_jitter_detected(NULL, 0);
-        }
-        if (test_stop_time > test_a_s1_time_max)
-        {
-            test_a_s1_time_max = test_stop_time;
-        }
-        if (test_stop_time < test_a_s1_time_min)
-        {
-            test_a_s1_time_min = test_stop_time;
-        }
-        ARG_UNUSED(p1);
-        ARG_UNUSED(p2);
-        ARG_UNUSED(p3);
-        BENCHMARK_reset_counter();
-        /* Measure API Cost on Same Band i.o. to preserve ISR and Schedule cost*/
-        BENCHMARK_GET_START_TIME(test_start_time);
-        k_event_wait_safe(&test_event, SCENARIO_3_EVENT_MASK, false, K_NO_WAIT);
-        BENCHMARK_GET_STOP_TIME(test_stop_time);                           /* S3_A */
-        test_a_s3_time += test_stop_time - test_start_time - test_dwta_ov; /* S3_A */
-        k_event_post(&test_event, SIGNALIZE_YIELD_EVENT_MASK);             /* YIELD TO I_Task */
+      BMTH_signalize_jitter_detected();
     }
+    k_event_post(&test_event, SIGNALIZE_YIELD_EVENT_MASK); /* Yield to I_Task */
+  }
+}
+
+static void H_Task_S3(void *p1, void *p2, void *p3)
+{
+  ARG_UNUSED(p1);
+  ARG_UNUSED(p2);
+  ARG_UNUSED(p3);
+
+  k_event_wait_safe(&test_event, START_EVENT_MASK, false,
+                    K_FOREVER); /* Started? */
+  while (1)
+  {
+    BMTH_RESET_COUNTER(); /* S3 */
+    BMTH_GET_START_CNT(test_start_time);
+    k_event_post(&test_event, SCENARIO_3_EVENT_MASK);
+    BMTH_GET_STOP_CNT(test_stop_time);
+    if (!BMTH_mseries_iterate(&scenario_3, test_start_time, test_stop_time))
+    {
+      BMTH_signalize_jitter_detected();
+    }
+    k_thread_suspend(k_current_get());
+  }
 }
 
 static void I_Task(void *p1, void *p2, void *p3)
 {
-    ARG_UNUSED(p1);
-    ARG_UNUSED(p2);
-    ARG_UNUSED(p3);
+  ARG_UNUSED(p1);
+  ARG_UNUSED(p2);
+  ARG_UNUSED(p3);
 
-    k_event_init(&test_event);
+  k_event_init(&test_event);
 
-    k_thread_create(&high_prio_thread, high_prio_stack, THREAD_STACK_SIZE, H_Task, NULL, NULL, NULL,
-                    HIGH_PRIO_THREAD_PRIORITY, 0, K_NO_WAIT);
+  k_thread_create(&high_prio_thread, high_prio_stack, THREAD_STACK_SIZE,
+                  H_Task_S1, NULL, NULL, NULL, HIGH_PRIO_THREAD_PRIORITY, 0,
+                  K_NO_WAIT);
 
-    k_thread_create(&low_prio_thread, low_prio_stack, THREAD_STACK_SIZE, L_Task, NULL, NULL, NULL,
-                    LOW_PRIO_THREAD_PRIORITY, 0, K_NO_WAIT);
+  k_thread_create(&low_prio_thread, low_prio_stack, THREAD_STACK_SIZE,
+                  L_Task_S1, NULL, NULL, NULL, LOW_PRIO_THREAD_PRIORITY, 0,
+                  K_NO_WAIT);
 
-    for (uint32_t i = 0; i < MEASUREMENT_COUNT - 1; i++)
+  for (uint32_t i = 0; i < MEASUREMENT_COUNT - 1; i++)
+  {
+    k_event_wait_safe(&test_event, SIGNALIZE_YIELD_EVENT_MASK, false,
+                      K_FOREVER);
+    k_thread_resume(&low_prio_thread);
+  }
+
+  k_thread_create(&s3_high_prio_thread, s3_high_prio_stack, THREAD_STACK_SIZE,
+                  H_Task_S3, NULL, NULL, NULL, S3_HIGH_PRIO_THREAD_PRIORITY, 0,
+                  K_NO_WAIT);
+
+  k_event_post(&test_event, START_EVENT_MASK); /* Start */
+  for (uint32_t i = 0; i < MEASUREMENT_COUNT - 1; i++)
+  {
+    k_event_wait_safe(&test_event, SCENARIO_3_EVENT_MASK, false, K_FOREVER);
+    k_thread_resume(&s3_high_prio_thread);
+  }
+
+  while (1)
+  {
+    if ((scenario_1.values_outlier_count != 0U)
+        || (scenario_3.values_outlier_count != 0U))
     {
-        k_event_wait_safe(&test_event, SIGNALIZE_YIELD_EVENT_MASK, false, K_FOREVER);
-        k_thread_resume(&low_prio_thread);
+      BMTH_signalize_mseries_stop(false);
     }
-
-    scenario_1_a = (float) test_a_s1_time / (float) MEASUREMENT_COUNT;
-    scenario_3_a = (float) test_a_s3_time / (float) MEASUREMENT_COUNT;
-
-    while (1)
+    else
     {
-        BENCHMARK_signal_measurement_stop();
+      BMTH_signalize_mseries_stop(true);
     }
+  }
 }
 
 /*!
@@ -156,21 +187,38 @@ static void I_Task(void *p1, void *p2, void *p3)
  */
 int main(void)
 {
-    BENCHMARK_hardware_init();
+  BMTH_hardware_init();
 
-    /* SystemInit enabled the LPCAC before main and Zephyr never turns it off: disable and clear it. */
-    SYSCON->LPCAC_CTRL |= (SYSCON_LPCAC_CTRL_DIS_LPCAC_MASK | SYSCON_LPCAC_CTRL_CLR_LPCAC_MASK);
+  BMTH_ENABLE_COUNTERS();
 
-    Benchmark_disable_sys_tick();
+  /* SystemInit enabled the LPCAC before main and Zephyr never turns it off:
+   * disable and clear it. */
+  SYSCON->LPCAC_CTRL |=
+    (SYSCON_LPCAC_CTRL_DIS_LPCAC_MASK | SYSCON_LPCAC_CTRL_CLR_LPCAC_MASK);
 
-    BENCHMARK_calc_overhead(MEASUREMENT_COUNT, &test_loop_ov, &test_dwta_ov);
+  BMTH_disable_sys_tick();
 
-    // Benchmark_enable_sys_tick();
+  if (!BMTH_check_read_validity(&test_dwta_ov, MEASUREMENT_COUNT))
+  {
+    BMTH_signalize_jitter_detected();
+  } /* check if the read overhead is valid */
 
-    BENCHMARK_signal_measurement_start();
+  BMTH_mseries_initialize(
+    &scenario_1, 0, NULL,
+    BMTH_MEASUREMENT_READ_WINDOW_CROSS_FUNCTIONS_FILE_SCOPE_VARS);
 
-    k_thread_create(&idle_thread, idle_stack, THREAD_STACK_SIZE, I_Task, NULL, NULL, NULL, IDLE_THREAD_PRIORITY, 0,
-                    K_NO_WAIT);
+  BMTH_mseries_initialize(
+    &scenario_3, 0, NULL,
+    BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
 
-    return 0;
+
+  BMTH_mseries_set_static_overhead(&scenario_1, test_dwta_ov);
+  BMTH_mseries_set_static_overhead(&scenario_3, test_dwta_ov);
+
+  BMTH_signalize_mseries_start();
+
+  k_thread_create(&idle_thread, idle_stack, THREAD_STACK_SIZE, I_Task, NULL,
+                  NULL, NULL, IDLE_THREAD_PRIORITY, 0, K_NO_WAIT);
+
+  return 0;
 }
