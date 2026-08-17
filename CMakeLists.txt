@@ -10,7 +10,7 @@ project(blinky)
 
 target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/timing)
 
-target_sources(app PRIVATE timing/time_task_switch.c 
+target_sources(app PRIVATE timing/time_task_switch.c timing/time_epilogue_simulate.c
                            timing/bmth_port.c)
 
 # HMS benchmark package

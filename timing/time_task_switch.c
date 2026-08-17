@@ -46,6 +46,8 @@ static BMTH_measurement_series_t scenario_1 = {
   .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
 static BMTH_measurement_series_t scenario_3 = {
   .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
+static BMTH_measurement_series_t scenario_3_a = {
+  .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
 
 /* Possible overhead values measurement */
 static uint32_t test_dwta_ov =
@@ -157,6 +159,9 @@ static void I_Task(void *p1, void *p2, void *p3)
     k_thread_resume(&low_prio_thread);
   }
 
+  k_thread_abort(&low_prio_thread);
+  k_thread_abort(&high_prio_thread);
+
   k_thread_create(&s3_high_prio_thread, s3_high_prio_stack, THREAD_STACK_SIZE,
                   H_Task_S3, NULL, NULL, NULL, S3_HIGH_PRIO_THREAD_PRIORITY, 0,
                   K_NO_WAIT);
@@ -211,9 +216,9 @@ int main(void)
     &scenario_3, 0, NULL,
     BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
 
+  measure_epilogue_tail_overhead(&scenario_3_a, MEASUREMENT_COUNT, 0x0);
 
-  BMTH_mseries_set_static_overhead(&scenario_1, test_dwta_ov);
-  BMTH_mseries_set_static_overhead(&scenario_3, test_dwta_ov);
+  BMTH_mseries_add_static_overhead(&scenario_3, scenario_3_a.values_average);
 
   BMTH_signalize_mseries_start();
 
