@@ -21,7 +21,8 @@
 #define IDLE_THREAD_PRIORITY 4
 #define LOW_PRIO_THREAD_PRIORITY 3
 #define HIGH_PRIO_THREAD_PRIORITY 1
-#define S3_HIGH_PRIO_THREAD_PRIORITY 2
+#define S3_LOW_PRIO_THREAD_PRIORITY 3
+#define S3_HIGH_PRIO_THREAD_PRIORITY 1
 
 #define MEASUREMENT_COUNT                                                      \
   (50000U) /* number of iterations to run for the actual measurement */
@@ -126,12 +127,14 @@ static void H_Task_S3(void *p1, void *p2, void *p3)
   {
     BMTH_RESET_COUNTER(); /* S3 */
     BMTH_GET_START_CNT(test_start_time);
+    /* No matching Waiter -> No walking and scheduler involvement */
     k_event_post(&test_event, SCENARIO_3_EVENT_MASK);
     BMTH_GET_STOP_CNT(test_stop_time);
     if (!BMTH_mseries_iterate(&scenario_3, test_start_time, test_stop_time))
     {
       BMTH_signalize_jitter_detected();
     }
+    k_event_post(&test_event, SIGNALIZE_YIELD_EVENT_MASK);
     k_thread_suspend(k_current_get());
   }
 }
@@ -169,7 +172,8 @@ static void I_Task(void *p1, void *p2, void *p3)
   k_event_post(&test_event, START_EVENT_MASK); /* Start */
   for (uint32_t i = 0; i < MEASUREMENT_COUNT - 1; i++)
   {
-    k_event_wait_safe(&test_event, SCENARIO_3_EVENT_MASK, false, K_FOREVER);
+    k_event_wait_safe(&test_event, SIGNALIZE_YIELD_EVENT_MASK, false,
+                      K_FOREVER);
     k_thread_resume(&s3_high_prio_thread);
   }
 
