@@ -194,22 +194,41 @@ static ALWAYS_INLINE int sim_z_swap_tail(uint32_t *sim_lock, uint32_t sim_key)
   return sim_z_swap_irqlock_tail(sim_key);
 }
 
-static void sim_pend_locked(struct k_thread *thread, _wait_q_t *wait_q,
-                            k_timeout_t timeout)
+static void sim_add_to_waitq_locked(struct k_thread *thread, _wait_q_t *wait_q)
 {
   __asm volatile("" ::: "r0", "r1", "r2", "r3");
-  if (thread == NULL)
+  if (thread == NULL || wait_q == NULL)
   {
     (void) sim_unreached_int();
   }
 }
-static int sim_z_pend_curr(struct z_kernel *k, uint32_t sim_key,
-                           uint32_t sim_wq, k_timeout_t timeout)
+
+static void sim_add_thread_timeout(struct k_thread *thread, k_timeout_t timeout)
 {
-  ARG_UNUSED(sim_wq);
-  (void) k_spin_lock(&_sched_spinlock);
-  sim_pend_locked(&sim_thread, NULL, timeout);
-  k_spin_release(&_sched_spinlock);
+  __asm volatile("" ::: "r0", "r1", "r2", "r3");
+  if (thread == NULL || timeout.ticks == 0)
+  {
+    (void) sim_unreached_int();
+  }
+}
+
+static void sim_pend_locked(struct k_thread *thread, _wait_q_t *wait_q,
+                            k_timeout_t timeout)
+{
+  sim_add_to_waitq_locked(thread, wait_q);
+  sim_add_thread_timeout(thread, timeout);
+}
+static int sim_z_pend_curr(struct k_spinlock *lock, uint32_t sim_key,
+                           _wait_q_t *wait_q, k_timeout_t timeout)
+{
+  ARG_UNUSED(lock);
+  ARG_UNUSED(wait_q);
+  ARG_UNUSED(timeout);
+
+  //(void) k_spin_lock(&_sched_spinlock);
+  // sim_pend_locked(sim_kernel.cpus[0].current, wait_q, timeout);
+  // k_spin_release(&_sched_spinlock);
+
   return sim_z_swap(NULL, sim_key);
 }
 
@@ -294,7 +313,8 @@ __attribute__((always_inline)) static inline void measure_event_tail(
   BMTH_GET_STOP_CNT(test_stop_time);
   sim_sink = rv;
 
-  if (!BMTH_mseries_iterate(mseries, test_start_time, test_stop_time))
+  if (BMTH_mseries_iterate(mseries, test_start_time, test_stop_time)
+      == BMTH_MEASUREMENT_WINDOW_COMPLETED_WITH_JITTER)
   {
     BMTH_signalize_jitter_detected();
   }
@@ -311,7 +331,7 @@ void measure_event_tail_overhead(BMTH_measurement_series_t *mseries,
   BMTH_mseries_initialize(
     mseries, 0, NULL,
     BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
-  for (uint32_t i = 0; i <= loop_count; i++)
+  for (uint32_t i = 0; i < loop_count; i++)
   {
     measure_event_tail(mseries);
   }
@@ -329,7 +349,8 @@ __attribute__((always_inline)) static inline void measure_event_z_swap(
   int rv   = sim_z_swap(&sim_lock, 0U);
   sim_sink = (uint32_t) rv;
 
-  if (!BMTH_mseries_iterate(mseries, test_start_time, test_stop_time))
+  if (BMTH_mseries_iterate(mseries, test_start_time, test_stop_time)
+      == BMTH_MEASUREMENT_WINDOW_COMPLETED_WITH_JITTER)
   {
     BMTH_signalize_jitter_detected();
   }
@@ -346,7 +367,7 @@ void measure_event_z_swap_overhead(BMTH_measurement_series_t *mseries,
   BMTH_mseries_initialize(
     mseries, 0, NULL,
     BMTH_MEASUREMENT_READ_WINDOW_CROSS_FUNCTIONS_FILE_SCOPE_VARS);
-  for (uint32_t i = 0; i <= loop_count; i++)
+  for (uint32_t i = 0; i < loop_count; i++)
   {
     measure_event_z_swap(mseries);
   }
@@ -418,16 +439,15 @@ out:
   return rv;
 }
 
-TAIL_SIM_FRAME static uint32_t sim_k_event_wait_internal(
-  struct k_thread *unused, uint32_t events, uint32_t options,
-  k_timeout_t timeout)
+TAIL_SIM_FRAME static uint32_t sim_k_event_wait_internal(struct k_event *event,
+                                                         uint32_t        events,
+                                                         uint32_t    options,
+                                                         k_timeout_t timeout)
 {
-  volatile uint32_t data[4];
-  struct k_thread  *thread;
-  uint32_t          rv;
-  uint32_t          wait_condition = options & 1U;
-
-  ARG_UNUSED(unused);
+  uint32_t rv = 0;
+  struct k_thread *volatile thread;
+  unsigned int wait_condition;
+  uint32_t     key;
 
   __asm__ volatile("" ::: "r9", "r10", "r11");
 
@@ -436,20 +456,17 @@ TAIL_SIM_FRAME static uint32_t sim_k_event_wait_internal(
     return 0U;
   }
 
-  thread = sim_current_thread_query();
+  wait_condition = options & 0x01;
+  thread         = sim_current_thread_query();
+  key            = irq_lock();
 
-  data[0] = sim_guard;
-  data[1] = options;
-  data[2] = (uint32_t) timeout.ticks;
-  data[3] = 0U;
-
-  rv = sim_are_wait_conditions_met(events, data[0], wait_condition);
+  rv = sim_are_wait_conditions_met(events, event->events, wait_condition);
   if (rv != 0U)
   {
     goto out;
   }
 
-  if (data[2] == 0U)
+  if (timeout.ticks == 0U)
   {
     irq_unlock(0);
     goto out;
@@ -457,10 +474,14 @@ TAIL_SIM_FRAME static uint32_t sim_k_event_wait_internal(
 
   SIM_OPEN_WINDOW();
 
-  thread->events        = events;
-  thread->event_options = data[1];
+  {
+    struct k_thread *t = thread;
 
-  if (sim_z_pend_curr(&sim_kernel, data[1], data[3], timeout) == 0)
+    t->events        = events;
+    t->event_options = options;
+  }
+
+  if (sim_z_pend_curr(&event->lock, key, &event->wait_q, timeout) == 0)
   {
     rv = thread->events;
   }
@@ -478,11 +499,11 @@ TAIL_SIM_FRAME static uint32_t sim_z_impl_k_event_wait_safe_tail(
 }
 
 TAIL_SIM_FRAME static uint32_t sim_z_impl_k_event_wait_safe(
-  struct k_thread *thread, uint32_t events, bool reset, k_timeout_t timeout)
+  struct k_event *event, uint32_t events, bool reset, k_timeout_t timeout)
 {
   uint32_t options = reset ? 0x06U : 0x04U;
 
-  return sim_k_event_wait_internal(thread, events, options, timeout);
+  return sim_k_event_wait_internal(event, events, options, timeout);
 }
 
 __attribute__((always_inline)) static inline void measure_wait_tail(
@@ -496,7 +517,8 @@ __attribute__((always_inline)) static inline void measure_wait_tail(
   BMTH_GET_STOP_CNT(test_stop_time);
   sim_wait_sink = rv;
 
-  if (!BMTH_mseries_iterate(mseries, test_start_time, test_stop_time))
+  if (BMTH_mseries_iterate(mseries, test_start_time, test_stop_time)
+      == BMTH_MEASUREMENT_WINDOW_COMPLETED_WITH_JITTER)
   {
     BMTH_signalize_jitter_detected();
   }
@@ -510,11 +532,11 @@ __attribute__((always_inline)) static inline void measure_wait_prologue(
   BMTH_RESET_CNTR();
 
   uint32_t rv =
-    sim_z_impl_k_event_wait_safe(&sim_thread, sim_wait_request, false, timeout);
-  BMTH_GET_STOP_CNT(test_stop_time);
+    sim_z_impl_k_event_wait_safe(&tail_event, sim_wait_request, false, timeout);
   sim_wait_sink = rv;
 
-  if (!BMTH_mseries_iterate(mseries, test_start_time, test_stop_time))
+  if (BMTH_mseries_iterate(mseries, test_start_time, test_stop_time)
+      == BMTH_MEASUREMENT_WINDOW_COMPLETED_WITH_JITTER)
   {
     BMTH_signalize_jitter_detected();
   }
