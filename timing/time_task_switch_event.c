@@ -37,6 +37,7 @@
 #define SIGNALIZE_YIELD_EVENT_MASK                                             \
   0x0004U /* H_Task -> I_Task: iteration complete, re-arm L_Task */
 #define START_EVENT_MASK 0x0008U /* H_Task -> L_Task: measurement may begin */
+#define SCENARIO_4_EVENT_MASK 0x0010U /* L_Task -> H_Task: S4_A stop marker */
 
 /*******************************************************************************
  * Variables
@@ -48,6 +49,10 @@ static BMTH_time_marker_t test_stop_time  = 0U;
 static BMTH_measurement_series_t scenario_1 = {
   .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
 static BMTH_measurement_series_t scenario_3 = {
+  .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
+static BMTH_measurement_series_t scenario_2 = {
+  .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
+static BMTH_measurement_series_t scenario_4 = {
   .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
 static BMTH_measurement_series_t event_tail = {
   .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
@@ -78,8 +83,13 @@ static struct k_thread s3_low_prio_thread;
 
 extern void measure_event_tail_overhead(BMTH_measurement_series_t *mseries,
                                         uint32_t loop_count, uint32_t options);
-extern void measure_wait_tail_overhead(BMTH_measurement_series_t *mseries,
-                                       uint32_t loop_count, uint32_t options);
+extern void measure_wait_overhead(BMTH_measurement_series_t *mseries,
+                                  uint32_t loop_count, uint32_t options);
+extern void measure_event_z_swap_overhead(BMTH_measurement_series_t *mseries,
+                                          uint32_t                   loop_count,
+                                          uint32_t                   options);
+extern void measure_wait_tail_no_wait_overhead(
+  BMTH_measurement_series_t *mseries, uint32_t loop_count, uint32_t options);
 
 /*******************************************************************************
  * Code
@@ -161,10 +171,68 @@ static void L_Task_S3(void *p1, void *p2, void *p3)
   while (1)
   {
     k_event_post(&test_event, SIGNALIZE_YIELD_EVENT_MASK);
+#if (TEST_S3_WAITER == 0x1U)
     k_event_wait_safe(&test_event, SCENARIO_3_EVENT_MASK, false,
                       K_FOREVER); /* S3 */
+#else
+    k_thread_suspend(k_current_get());
+#endif
   }
 }
+
+static void L_Task_S4(void *p1, void *p2, void *p3)
+{
+  ARG_UNUSED(p1);
+  ARG_UNUSED(p2);
+  ARG_UNUSED(p3);
+
+  while (1)
+  {
+    BMTH_GET_STOP_CNT(test_stop_time);
+    if (BMTH_mseries_iterate(&scenario_4, test_start_time, test_stop_time)
+        == BMTH_MEASUREMENT_WINDOW_COMPLETED_WITH_JITTER)
+    {
+      BMTH_signalize_jitter_detected();
+    }
+    BMTH_mwindow_close(&scenario_4);
+    k_event_post(&test_event, SIGNALIZE_YIELD_EVENT_MASK); /* Yield to I_Task */
+    k_thread_suspend(k_current_get());
+    k_event_post(&test_event, SCENARIO_4_EVENT_MASK); /* Yield to I_Task */
+  }
+}
+
+static void H_Task_S4(void *p1, void *p2, void *p3)
+{
+  ARG_UNUSED(p1);
+  ARG_UNUSED(p2);
+  ARG_UNUSED(p3);
+
+  k_event_wait_safe(&test_event, START_EVENT_MASK, false,
+                    K_FOREVER); /* Started? */
+  while (1)
+  {
+    BMTH_mwindow_open(&scenario_4);
+    BMTH_RESET_COUNTER(); /* S4 */
+    BMTH_GET_START_CNT(test_start_time);
+    k_event_wait_safe(&test_event, SCENARIO_4_EVENT_MASK, false,
+                      K_FOREVER); /* S4 */
+  }
+}
+
+#if defined(ADD_TASK_LOAD) && (ADD_TASK_LOAD == 1U)
+
+static void dummy_task_preempt(void *p1, void *p2, void *p3)
+{
+  ARG_UNUSED(p2);
+  ARG_UNUSED(p3);
+
+  while (1)
+  {
+    k_event_wait_safe(&test_event, *(uint32_t *) p1, false, K_FOREVER);
+  }
+}
+
+#endif
 
 static void I_Task(void *p1, void *p2, void *p3)
 {
@@ -204,6 +272,46 @@ static void I_Task(void *p1, void *p2, void *p3)
     k_event_wait_safe(&test_event, SIGNALIZE_YIELD_EVENT_MASK, false,
                       K_FOREVER);
     k_thread_resume(&s3_high_prio_thread);
+#if (TEST_S3_WAITER == 0x0U)
+    k_thread_resume(&s3_low_prio_thread);
+#endif
+  }
+
+  k_thread_abort(&s3_low_prio_thread);
+  k_thread_abort(&s3_high_prio_thread);
+
+  k_thread_create(&s4_high_prio_thread, s4_high_prio_stack, THREAD_STACK_SIZE,
+                  H_Task_S4, NULL, NULL, NULL, HIGH_PRIO_THREAD_PRIORITY, 0,
+                  K_NO_WAIT);
+  k_thread_create(&s4_low_prio_thread, s4_low_prio_stack, THREAD_STACK_SIZE,
+                  L_Task_S4, NULL, NULL, NULL, LOW_PRIO_THREAD_PRIORITY, 0,
+                  K_NO_WAIT);
+
+  k_event_post(&test_event, START_EVENT_MASK); /* Start */
+  for (uint32_t i = 0; i < MEASUREMENT_COUNT - 1; i++)
+  {
+    k_event_wait_safe(&test_event, SIGNALIZE_YIELD_EVENT_MASK, false,
+                      K_FOREVER);
+    k_thread_resume(&s4_low_prio_thread);
+  }
+
+  k_thread_abort(&s4_low_prio_thread);
+  k_thread_abort(&s4_high_prio_thread);
+
+  for (uint32_t i = 0; i < MEASUREMENT_COUNT - 1; i++)
+  {
+    BMTH_mwindow_open(&scenario_2);
+    BMTH_RESET_COUNTER(); /* S4 */
+    BMTH_GET_START_CNT(test_start_time);
+    k_event_wait_safe(&test_event, SCENARIO_4_EVENT_MASK, false,
+                      K_NO_WAIT); /* S4 */
+    BMTH_GET_STOP_CNT(test_stop_time);
+    if (BMTH_mseries_iterate(&scenario_2, test_start_time, test_stop_time)
+        == BMTH_MEASUREMENT_WINDOW_COMPLETED_WITH_JITTER)
+    {
+      BMTH_signalize_jitter_detected();
+    }
+    BMTH_mwindow_close(&scenario_2);
   }
 
   while (1)
@@ -251,7 +359,21 @@ int main(void)
 
   measure_event_tail_overhead(&event_tail, MEASUREMENT_COUNT, 0x0);
 
-  measure_wait_tail_overhead(&wait_tail, MEASUREMENT_COUNT, 0x0);
+  measure_wait_overhead(&wait_tail, MEASUREMENT_COUNT, 0x1);
+
+  measure_event_z_swap_overhead(&z_swap_overhead, MEASUREMENT_COUNT, 0x0);
+
+  measure_wait_tail_no_wait_overhead(&wait_tail_no_wait, MEASUREMENT_COUNT,
+                                     0x0);
+  measure_wait_overhead(&wait_prologue, MEASUREMENT_COUNT, 0x2);
+
+  BMTH_mseries_initialize(
+    &scenario_4, 0, NULL,
+    BMTH_MEASUREMENT_READ_WINDOW_CROSS_FUNCTIONS_FILE_SCOPE_VARS);
+
+  BMTH_mseries_initialize(
+    &scenario_2, 0, NULL,
+    BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
 
   BMTH_signalize_mseries_start();
 
