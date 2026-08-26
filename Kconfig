@@ -1,2 +1,61 @@
+#
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 HMS Industrial Networks GmbH & Co. KG
+# Author: Isaac L. L. Yuki
+#
+
+choice BENCHMARK_TEST
+    prompt "Benchmark test to build"
+    default BENCHMARK_TEST_EVENT_TASK_SWITCH_PREEMPT
+    help
+      Exactly one benchmark test is linked into the image: every test
+      provides its own main() and its own set of measurement threads,
+      so they cannot be built together.
+
+config BENCHMARK_TEST_EVENT_TASK_SWITCH_PREEMPT
+    bool "Task switch via k_event, preempting waiter"
+    help
+      timing/task_switch/preempt/time_task_switch_event.c
+
+      S_A measures the L_Task -> H_Task switch triggered by k_event_post()
+      when a higher priority waiter is pending. S_B measures the bare
+      k_event_post() cost with no matching waiter.
+
+config BENCHMARK_TEST_EVENT_TASK_SWITCH_BLOCK
+    bool "Task switch via k_event, blocking waiter"
+    help
+      timing/task_switch/block/time_task_switch_event.c
+
+      Same S_A / S_B pair, but the waiter blocks instead of preempting, so
+      the measurement also covers the wait prologue and the no-wait tail.
+
+config BENCHMARK_TEST_TASK_SWITCH_CHANGE
+    bool "Task switch via k_thread_priority_set()"
+    help
+      timing/task_switch/task_change/time_task_switch.c
+
+      Same S_A / S_B pair, but the switch is triggered by yield. All tasks
+      are same priority.
+
+config BENCHMARK_TEST_TASK_SWITCH_PREEMPT
+    bool "Task switch via k_thread_resume()"
+    help
+      timing/task_switch/task_preempt/time_task_switch.c
+
+      Same S_A / S_B pair, but the switch is triggered by resume. The
+      waiter is higher priority than the poster.
+
+config BENCHMARK_TEST_SEM_TASK_SWITCH_PREEMPT
+    bool "Task switch via k_sem, preempting waiter"
+    help
+      timing/task_switch/sem_preempt/time_task_switch_sem.c
+
+      Same S_A / S_B pair as the k_event preempt test, but the switch is
+      triggered by k_sem_give() while a higher priority thread pends in
+      k_sem_take(). S_B gives with no waiter, or with a waiter that cannot
+      preempt the giver.
+
+endchoice
+
 source "Kconfig.zephyr"
 rsource "packages/benchmark_hms/Kconfig"

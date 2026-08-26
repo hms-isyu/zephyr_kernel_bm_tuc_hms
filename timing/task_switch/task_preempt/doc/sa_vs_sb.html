@@ -1,0 +1,242 @@
+<title>task_preempt — S_A vs S_B</title>
+<style>
+:root{
+  --bg:#ffffff; --fg:#1b1f24; --muted:#6a737d; --line:#d8dee4; --head:#f2f4f7;
+  --code:#24292f; --alias:#8250df; --addr:#57606a;
+  --win:#fff6d5; --mark:#c25e00; --markbg:#fff1e3;
+  --isr:#0a5ca8; --isrbg:#e4f0fb;
+  --match:#0a7f6b; --matchtint:rgba(10,127,107,.12);
+  --ok:#1a7f37; --eq:#8a6d00; --df:#8250df; --fold:#f6f8fa;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; --head:#161b22;
+  --code:#e6edf3; --alias:#d2a8ff; --addr:#8b949e;
+  --win:#3a3213; --mark:#ff9d4d; --markbg:#3d2410;
+  --isr:#79c0ff; --isrbg:#12283f;
+  --match:#39d3b4; --matchtint:rgba(57,211,180,.15);
+  --ok:#3fb950; --eq:#d9b400; --df:#d2a8ff; --fold:#161b22;}}
+:root[data-theme="dark"]{
+  --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; --head:#161b22;
+  --code:#e6edf3; --alias:#d2a8ff; --addr:#8b949e;
+  --win:#3a3213; --mark:#ff9d4d; --markbg:#3d2410;
+  --isr:#79c0ff; --isrbg:#12283f;
+  --match:#39d3b4; --matchtint:rgba(57,211,180,.15);
+  --ok:#3fb950; --eq:#d9b400; --df:#d2a8ff; --fold:#161b22;}
+body{background:var(--bg);color:var(--fg);margin:0;padding:2rem 1.25rem 4rem;
+  font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;}
+main{max-width:1220px;margin:0 auto;}
+h1{font-size:1.4rem;margin:0 0 .3rem;letter-spacing:-.01em;}
+h2{font-size:1.05rem;margin:2.6rem 0 .3rem;letter-spacing:-.01em;}
+.lead{color:var(--muted);margin:0 0 1.2rem;font-size:.92rem;}
+.sub{color:var(--muted);margin:0 0 .8rem;font-size:.88rem;}
+.legend{display:flex;flex-wrap:wrap;gap:.5rem 1.1rem;margin:0 0 1.4rem;
+  font-size:.82rem;color:var(--muted);}
+.legend span{display:inline-flex;align-items:center;gap:.4rem;}
+.sw{width:.85rem;height:.85rem;border-radius:3px;border:1px solid var(--line);
+  display:inline-block;}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:8px;}
+table{border-collapse:collapse;width:100%;font-size:12.5px;}
+th{background:var(--head);text-align:left;padding:.5rem .7rem;font-weight:600;
+  border-bottom:1px solid var(--line);white-space:nowrap;}
+td{padding:.22rem .7rem;border-bottom:1px solid var(--line);vertical-align:top;}
+td.c{font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+  white-space:pre;color:var(--code);}
+td.win{background:var(--win);}
+td.rn{color:var(--addr);text-align:right;padding:.22rem .55rem;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
+  font-size:11px;font-variant-numeric:tabular-nums;
+  user-select:none;white-space:nowrap;}
+th.rn{text-align:right;}
+tr.frame td{background:var(--fold);font-size:11.5px;color:var(--muted);
+  padding:.38rem .7rem;border-top:1px solid var(--line);}
+tr.frame b{color:var(--fg);}
+tr.mark td{background:var(--markbg);}
+tr.mark td.lbl{color:var(--mark);font-weight:700;border-left:3px solid var(--mark);}
+tr.isr td{background:var(--isrbg);}
+tr.matchpath td{background-image:linear-gradient(var(--matchtint),var(--matchtint));}
+tr.matchpath td:first-child{box-shadow:inset 3px 0 0 var(--match);}
+table.desc{border-collapse:collapse;width:100%;font-size:12px;margin:.2rem 0 1.2rem;}
+table.desc caption{caption-side:top;text-align:left;font-size:.8rem;
+  font-weight:600;color:var(--fg);padding:0 0 .35rem;letter-spacing:.01em;}
+table.desc thead th{background:var(--head);font-size:11.5px;padding:.35rem .6rem;
+  border-bottom:1px solid var(--line);vertical-align:bottom;}
+table.desc th.rl{width:15rem;text-align:left;vertical-align:top;
+  background:transparent;font-weight:600;color:var(--fg);white-space:normal;
+  padding:.3rem .6rem;border-bottom:1px solid var(--line);}
+table.desc td{vertical-align:top;color:var(--muted);padding:.3rem .6rem;
+  border-bottom:1px solid var(--line);}
+table.desc td.full{color:var(--muted);}
+tr.isr td.lbl{color:var(--isr);font-weight:700;border-left:3px solid var(--isr);}
+.cmt{color:var(--muted);font-style:italic;}
+.modelled{border-left:3px solid var(--df);}
+.mkey{display:inline-block;width:.85rem;height:.85rem;border-left:3px solid var(--df);
+  background:var(--fold);border-radius:2px;}
+.badge{display:inline-block;border:1.5px solid var(--mark);color:var(--mark);
+  border-radius:3px;padding:0 .35rem;margin-right:.5rem;font-size:10px;
+  font-weight:800;letter-spacing:.06em;vertical-align:1px;}
+.badge.isr{border-color:var(--isr);color:var(--isr);}
+.alias{color:var(--alias);}
+.addr{color:var(--addr);}
+.st{font-size:11px;font-weight:600;white-space:nowrap;}
+.st.identical{color:var(--ok);}
+.st.equivalent{color:var(--eq);}
+.st.differs{color:var(--df);}
+.meta{margin:.7rem 0 0;font-size:.8rem;color:var(--muted);}
+.meta dt{font-weight:600;color:var(--fg);margin-top:.45rem;}
+.meta dd{margin:.1rem 0 0 0;}
+.prov{margin-top:2.8rem;font-size:.82rem;color:var(--muted);
+  border-top:1px solid var(--line);padding-top:.9rem;}
+.prov h3{font-size:.9rem;color:var(--fg);margin:0 0 .5rem;}
+.prov dt{font-weight:600;color:var(--fg);margin-top:.5rem;}
+.prov dd{margin:.1rem 0 0 0;}
+code{font-family:ui-monospace,Consolas,monospace;font-size:.9em;}
+</style>
+<main>
+<h1>task_preempt — S_A vs S_B</h1>
+<p class="lead">The complete measured window of both scenarios, in execution order across frames. Each scenario runs from its own counter capture to its own counter capture, and every instruction the counter sees is listed.</p>
+
+<div class="legend">
+  <span><i class="sw" style="background:var(--win)"></i>measurement window</span>
+  <span><i class="sw" style="background:var(--markbg);border-left:3px solid var(--mark)"></i>counter capture</span>
+  <span><i class="sw" style="background:var(--isrbg);border-left:3px solid var(--isr)"></i>PendSV boundary</span>
+  <span><i class="sw" style="background:var(--matchtint);border-left:3px solid var(--match)"></i>match path &mdash; the waiter's mask matched, so this waiter is unpended and made ready</span>
+  <span><i class="sw" style="background:var(--fold)"></i>frame divider</span>
+  <span><i class="mkey"></i>reached through a modelled branch decision, not observed</span>
+</div>
+<h2>S_A vs S_B — the whole window</h2>
+<p class="sub">Both scenarios call <code>k_thread_resume()</code> on the same thread, <code>sa_high_prio_thread(8)</code>. S_A resumes it from <code>L_Task_SA(9)</code>, so it preempts and <code>reschedule()</code> takes the swap arm; the counter stops in <code>H_Task_SA</code> as it returns from <code>k_thread_suspend()</code>. S_B resumes it from <code>Task_SB(2)</code>, which outranks it, so <code>reschedule()</code> takes the no-swap arm and returns to the caller. Everything before that branch is common to both and cancels in the difference.</p>
+<table class="desc"><caption>Test cases and preconditions</caption><thead><tr><th></th><th>S_A</th><th>S_B</th></tr></thead><tbody><tr><th class="rl">Resuming thread</th><td><code>L_Task_SA(9)</code></td><td><code>Task_SB(2)</code></td></tr><tr><th class="rl">Resumed thread</th><td><code>sa_high_prio_thread(8)</code></td><td><code>sa_high_prio_thread(8)</code> &mdash; the same thread</td></tr><tr><th class="rl">Run queue at the resume</th><td><code>[L_Task_SA(9), I_Task(15), idle(15)]</code></td><td><code>[Task_SB(2), I_Task(15), idle(15)]</code></td></tr><tr><th class="rl">Read-window mode</th><td><code>CROSS_FUNCTIONS</code></td><td><code>INSIDE_FUNCTION</code></td></tr><tr><th class="rl">Configuration</th><td class="full" colspan="2"><code>TASK_SA_LOW_PRIO = 9</code>, <code>TASK_SA_HIGH_PRIO = 8</code>, <code>TASK_SB_HIGH_PRIO = 2</code>, <code>TASK_IDLE_PRIO = 15</code>, no dummy threads. Both columns come from the linked <code>CONFIG_BENCHMARK_TEST_TASK_SWITCH_PREEMPT=y</code> image.</td></tr></tbody></table>
+<div class="scroll"><table>
+<thead><tr><th class="rn">#</th><th>S_A — L_Task_SA(9) resumes sa_high(8), switches</th><th>S_B — Task_SB(2) resumes sa_high(8), no switch</th></tr></thead>
+<tbody>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem">executing in L_Task_SA(9) -- the resuming thread &nbsp;|&nbsp; &mdash;</td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem">&mdash; &nbsp;|&nbsp; executing in Task_SB(2) -- never leaves the CPU</td></tr>
+<tr class=""><td class="rn">1</td><td class="c"><span class="alias">S_A task</span> <span class="addr">30001198</span>  ldr r3, [pc, #32]</td><td class="c"><span class="alias">S_B task</span> <span class="addr">3000110e</span>  ldr r4, [pc, #68]</td></tr>
+<tr class=""><td class="rn">2</td><td class="c"><span class="alias">S_A task</span> <span class="addr">3000119a</span>  movs r2, #0</td><td class="c"><span class="alias">S_B task</span> <span class="addr">30001110</span>  movs r3, #0</td></tr>
+<tr class=""><td class="rn">3</td><td class="c"><span class="alias">S_A task</span> <span class="addr">3000119c</span>  str r2, [r3, #4]</td><td class="c"><span class="alias">S_B task</span> <span class="addr">30001112</span>  str r3, [r4, #4]</td></tr>
+<tr class=""><td class="rn">4</td><td class="c"><span class="alias">S_A task</span> <span class="addr">3000119e</span>  dsb sy</td><td class="c"><span class="alias">S_B task</span> <span class="addr">30001114</span>  dsb sy</td></tr>
+<tr class=""><td class="rn">5</td><td class="c"><span class="alias">S_A task</span> <span class="addr">300011a2</span>  isb sy</td><td class="c"><span class="alias">S_B task</span> <span class="addr">30001118</span>  isb sy</td></tr>
+<tr class=""><td class="rn">6</td><td class="c win"><span class="badge">START</span><span class="alias">S_A task</span> <span class="addr">300011a6</span>  ldr r2, [r3, #4]</td><td class="c win"><span class="badge">START</span><span class="alias">S_B task</span> <span class="addr">3000111c</span>  ldr r3, [r4, #4]</td></tr>
+<tr class=""><td class="rn">7</td><td class="c win"><span class="alias">S_A task</span> <span class="addr">300011a8</span>  ldr r3, [pc, #20]</td><td class="c win"><span class="alias">S_B task</span> <span class="addr">3000111e</span>  ldr r6, [pc, #56]</td></tr>
+<tr class=""><td class="rn">8</td><td class="c win"><span class="alias">S_A task</span> <span class="addr">300011aa</span>  str r2, [r3, #0]</td><td class="c win"><span class="alias">S_B task</span> <span class="addr">30001120</span>  str r3, [r6, #0]</td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem">only S_A runs this instruction: same role, different spelling: both scenarios load the thread pointer argument for k_thread_resume(). S_A reads it from the literal pool because nothing else in the loop holds it, while S_B still has it live in r7 from its own k_thread_suspend() call, so one ldr becomes one mov. Equal cost, and it is outside anything the test is trying to measure. &nbsp;|&nbsp; &mdash;</td></tr>
+<tr class=""><td class="rn">9</td><td class="c win"><span class="alias">S_A task</span> <span class="addr">300011ac</span>  ldr r0, [pc, #20]</td><td class="c"></td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem">&mdash; &nbsp;|&nbsp; only S_B runs this instruction: the S_B half of the same argument setup described in the block above.</td></tr>
+<tr class=""><td class="rn">10</td><td class="c"></td><td class="c win"><span class="alias">S_B task</span> <span class="addr">30001122</span>  mov r0, r7</td></tr>
+<tr class=""><td class="rn">11</td><td class="c win"><span class="alias">S_A task</span> <span class="addr">300011ae</span>  bl 30003fc8 &lt;z_impl_k_thread_resume&gt;</td><td class="c win"><span class="alias">S_B task</span> <span class="addr">30001124</span>  bl 30003fc8 &lt;z_impl_k_thread_resume&gt;</td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem"><b>z_impl_k_thread_resume</b> calls &nbsp;|&nbsp; <b>z_impl_k_thread_resume</b> calls</td></tr>
+<tr class=""><td class="rn">12</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fc8</span>  push {r4, lr}</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fc8</span>  push {r4, lr}</td></tr>
+<tr class=""><td class="rn">13</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fca</span>  mrs r4, BASEPRI</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fca</span>  mrs r4, BASEPRI</td></tr>
+<tr class=""><td class="rn">14</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fce</span>  movs r3, #32</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fce</span>  movs r3, #32</td></tr>
+<tr class=""><td class="rn">15</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fd0</span>  msr BASEPRI_MAX, r3</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fd0</span>  msr BASEPRI_MAX, r3</td></tr>
+<tr class=""><td class="rn">16</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fd4</span>  isb sy</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fd4</span>  isb sy</td></tr>
+<tr class=""><td class="rn">17</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fd8</span>  ldrb r3, [r0, #16]</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fd8</span>  ldrb r3, [r0, #16]</td></tr>
+<tr class=""><td class="rn">18</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fda</span>  ubfx r2, r3, #4, #1</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fda</span>  ubfx r2, r3, #4, #1</td></tr>
+<tr class=""><td class="rn">19</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fde</span>  eor.w r2, r2, #1</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fde</span>  eor.w r2, r2, #1</td></tr>
+<tr class=""><td class="rn">20</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fe2</span>  tst.w r2, #255</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fe2</span>  tst.w r2, #255</td></tr>
+<tr class=""><td class="rn">21</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fe6</span>  bne.n 30003ffc</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fe6</span>  bne.n 30003ffc</td></tr>
+<tr class=""><td class="rn">22</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fe8</span>  bic.w r3, r3, #16</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fe8</span>  bic.w r3, r3, #16</td></tr>
+<tr class=""><td class="rn">23</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fec</span>  strb r3, [r0, #16]</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fec</span>  strb r3, [r0, #16]</td></tr>
+<tr class=""><td class="rn">24</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fee</span>  bl 30003c24 &lt;ready_thread&gt;</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003fee</span>  bl 30003c24 &lt;ready_thread&gt;</td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem"><b>ready_thread</b> calls &nbsp;|&nbsp; <b>ready_thread</b> calls</td></tr>
+<tr class=""><td class="rn">25</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c24</span>  ldrb r3, [r0, #16]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c24</span>  ldrb r3, [r0, #16]</td></tr>
+<tr class=""><td class="rn">26</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c26</span>  ldrsb.w r2, [r0, #16]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c26</span>  ldrsb.w r2, [r0, #16]</td></tr>
+<tr class=""><td class="rn">27</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c2a</span>  cmp r2, #0</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c2a</span>  cmp r2, #0</td></tr>
+<tr class=""><td class="rn">28</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c2c</span>  blt.n 30003c9c</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c2c</span>  blt.n 30003c9c</td></tr>
+<tr class=""><td class="rn">29</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c2e</span>  tst.w r3, #31</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c2e</span>  tst.w r3, #31</td></tr>
+<tr class=""><td class="rn">30</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c32</span>  bne.n 30003c9c</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c32</span>  bne.n 30003c9c</td></tr>
+<tr class=""><td class="rn">31</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c34</span>  orn r3, r3, #127</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c34</span>  orn r3, r3, #127</td></tr>
+<tr class=""><td class="rn">32</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c38</span>  strb r3, [r0, #16]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c38</span>  strb r3, [r0, #16]</td></tr>
+<tr class=""><td class="rn">33</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c3a</span>  ldr r2, [pc, #132]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c3a</span>  ldr r2, [pc, #132]</td></tr>
+<tr class=""><td class="rn">34</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c3c</span>  ldr.w r3, [r2, #24]!</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c3c</span>  ldr.w r3, [r2, #24]!</td></tr>
+<tr class=""><td class="rn">35</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c40</span>  cmp r3, r2</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c40</span>  cmp r3, r2</td></tr>
+<tr class=""><td class="rn">36</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c42</span>  beq.n 30003cb0</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c42</span>  beq.n 30003cb0</td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem">&mdash; &nbsp;|&nbsp; modelled, not shown: S_B executes the z_priq_simple_add priority scan once more here. That extra pass is 17 instructions. the run-queue scan needs a second pass in S_B. z_sched_prio_cmp finds the resumed thread (8) worse than the queue head Task_SB(2), so this is not the insertion point: sys_dlist_peek_next_no_check advances to idle(15) and the compare runs again. S_A resumes the same thread from L_Task_SA(9), which 8 does outrank, so its scan inserts on the first compare. The asymmetry is not the wake -- it is where the woken thread lands in the caller&#x27;s run queue.</td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem">the z_priq_simple_add priority scan -- pass 1  (modelled) &nbsp;|&nbsp; the z_priq_simple_add priority scan -- pass 1  (modelled)</td></tr>
+<tr class=""><td class="rn">37</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c44</span>  cbz r3, 30003c66</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c44</span>  cbz r3, 30003c66</td></tr>
+<tr class=""><td class="rn">38</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c46</span>  ldrsb.w r1, [r0, #14]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c46</span>  ldrsb.w r1, [r0, #14]</td></tr>
+<tr class=""><td class="rn">39</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c4a</span>  ldrsb.w r2, [r3, #14]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c4a</span>  ldrsb.w r2, [r3, #14]</td></tr>
+<tr class=""><td class="rn">40</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c4e</span>  cmp r1, r2</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c4e</span>  cmp r1, r2</td></tr>
+<tr class=""><td class="rn">41</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c50</span>  beq.n 30003c58</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c50</span>  beq.n 30003c58</td></tr>
+<tr class=""><td class="rn">42</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c52</span>  subs r2, r2, r1</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c52</span>  subs r2, r2, r1</td></tr>
+<tr class=""><td class="rn">43</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c54</span>  cmp r2, #0</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c54</span>  cmp r2, #0</td></tr>
+<tr class=""><td class="rn">44</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c56</span>  bgt.n 30003c9e</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c56</span>  bgt.n 30003c9e</td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem">bgt.n at ready_thread +032 jumps over 30003c58..30003c9d -- 32 instructions not executed &nbsp;|&nbsp; bgt.n at ready_thread +032 jumps over 30003c58..30003c9d -- 32 instructions not executed</td></tr>
+<tr class=""><td class="rn">45</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c9e</span>  ldr r2, [r3, #4]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c9e</span>  ldr r2, [r3, #4]</td></tr>
+<tr class=""><td class="rn">46</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003ca0</span>  str r2, [r0, #4]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003ca0</span>  str r2, [r0, #4]</td></tr>
+<tr class=""><td class="rn">47</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003ca2</span>  str r3, [r0, #0]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003ca2</span>  str r3, [r0, #0]</td></tr>
+<tr class=""><td class="rn">48</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003ca4</span>  str r0, [r2, #0]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003ca4</span>  str r0, [r2, #0]</td></tr>
+<tr class=""><td class="rn">49</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003ca6</span>  str r0, [r3, #4]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003ca6</span>  str r0, [r3, #4]</td></tr>
+<tr class=""><td class="rn">50</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003ca8</span>  b.n 30003c76</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003ca8</span>  b.n 30003c76</td></tr>
+<tr class=""><td class="rn">51</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c76</span>  ldr r2, [pc, #72]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c76</span>  ldr r2, [pc, #72]</td></tr>
+<tr class=""><td class="rn">52</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c78</span>  ldr.w r3, [r2, #24]!</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c78</span>  ldr.w r3, [r2, #24]!</td></tr>
+<tr class=""><td class="rn">53</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c7c</span>  cmp r3, r2</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c7c</span>  cmp r3, r2</td></tr>
+<tr class=""><td class="rn">54</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c7e</span>  beq.n 30003cb4</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c7e</span>  beq.n 30003cb4</td></tr>
+<tr class=""><td class="rn">55</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c80</span>  cbz r3, 30003cb4</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c80</span>  cbz r3, 30003cb4</td></tr>
+<tr class=""><td class="rn">56</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c82</span>  ldr r2, [pc, #60]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c82</span>  ldr r2, [pc, #60]</td></tr>
+<tr class=""><td class="rn">57</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c84</span>  ldr r2, [r2, #8]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c84</span>  ldr r2, [r2, #8]</td></tr>
+<tr class=""><td class="rn">58</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c86</span>  ldrb r1, [r2, #16]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c86</span>  ldrb r1, [r2, #16]</td></tr>
+<tr class=""><td class="rn">59</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c88</span>  tst.w r1, #31</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c88</span>  tst.w r1, #31</td></tr>
+<tr class=""><td class="rn">60</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c8c</span>  bne.n 30003c98</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c8c</span>  bne.n 30003c98</td></tr>
+<tr class=""><td class="rn">61</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c8e</span>  ldrh r1, [r2, #14]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c8e</span>  ldrh r1, [r2, #14]</td></tr>
+<tr class=""><td class="rn">62</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c90</span>  cmp r1, #127</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c90</span>  cmp r1, #127</td></tr>
+<tr class=""><td class="rn">63</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c92</span>  bls.n 30003c98</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c92</span>  bls.n 30003c98</td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem">bls.n at ready_thread +06e jumps over 30003c94..30003c97 -- 2 instructions not executed &nbsp;|&nbsp; bls.n at ready_thread +06e jumps over 30003c94..30003c97 -- 2 instructions not executed</td></tr>
+<tr class=""><td class="rn">64</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c98</span>  ldr r2, [pc, #36]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c98</span>  ldr r2, [pc, #36]</td></tr>
+<tr class=""><td class="rn">65</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c9a</span>  str r3, [r2, #20]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c9a</span>  str r3, [r2, #20]</td></tr>
+<tr class=""><td class="rn">66</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c9c</span>  bx lr</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c9c</span>  bx lr</td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem"><b>z_impl_k_thread_resume</b> returns to &nbsp;|&nbsp; <b>z_impl_k_thread_resume</b> returns to</td></tr>
+<tr class=""><td class="rn">67</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003ff2</span>  mov r1, r4</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003ff2</span>  mov r1, r4</td></tr>
+<tr class=""><td class="rn">68</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003ff4</span>  ldr r0, [pc, #16]</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003ff4</span>  ldr r0, [pc, #16]</td></tr>
+<tr class=""><td class="rn">69</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003ff6</span>  bl 30003cc4 &lt;reschedule&gt;</td><td class="c win"><span class="alias">resume</span> <span class="addr">30003ff6</span>  bl 30003cc4 &lt;reschedule&gt;</td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem"><b>reschedule</b> calls &nbsp;|&nbsp; <b>reschedule</b> calls</td></tr>
+<tr class=""><td class="rn">70</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003cc4</span>  mov r0, r1</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003cc4</span>  mov r0, r1</td></tr>
+<tr class=""><td class="rn">71</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003cc6</span>  cbnz r1, 30003cea</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003cc6</span>  cbnz r1, 30003cea</td></tr>
+<tr class=""><td class="rn">72</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003cc8</span>  push {r3, lr}</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003cc8</span>  push {r3, lr}</td></tr>
+<tr class=""><td class="rn">73</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003cca</span>  mrs r3, IPSR</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003cca</span>  mrs r3, IPSR</td></tr>
+<tr class=""><td class="rn">74</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003cce</span>  cbnz r3, 30003ce0</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003cce</span>  cbnz r3, 30003ce0</td></tr>
+<tr class=""><td class="rn">75</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003cd0</span>  ldr r3, [pc, #32]</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003cd0</span>  ldr r3, [pc, #32]</td></tr>
+<tr class=""><td class="rn">76</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003cd2</span>  ldr r2, [r3, #20]</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003cd2</span>  ldr r2, [r3, #20]</td></tr>
+<tr class=""><td class="rn">77</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003cd4</span>  ldr r3, [r3, #8]</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003cd4</span>  ldr r3, [r3, #8]</td></tr>
+<tr class=""><td class="rn">78</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003cd6</span>  cmp r2, r3</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003cd6</span>  cmp r2, r3</td></tr>
+<tr class=""><td class="rn">79</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003cd8</span>  beq.n 30003ce0</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003cd8</span>  beq.n 30003ce0</td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem">only S_A runs these 12 instructions: the divergence point of the whole test. update_cache() left _kernel.ready_q.cache pointing at the new run-queue head: the resumed thread (8) in S_A, which is not _current, and Task_SB(2) in S_B, which is. reschedule() compares the two and only S_A reaches z_swap_irqlock. Everything below is the context switch and the resumed thread&#x27;s return path, and S_B has no counterpart for any of it. &nbsp;|&nbsp; &mdash;</td></tr>
+<tr class=""><td class="rn">80</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003cda</span>  bl 30003bf0 &lt;z_swap_irqlock&gt;</td><td class="c"></td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem"><b>z_swap_irqlock</b> calls &nbsp;|&nbsp; &mdash;</td></tr>
+<tr class=""><td class="rn">81</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003bf0</span>  ldr r2, [pc, #40]</td><td class="c"></td></tr>
+<tr class=""><td class="rn">82</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003bf2</span>  ldr r3, [r2, #8]</td><td class="c"></td></tr>
+<tr class=""><td class="rn">83</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003bf4</span>  str r0, [r3, #124]</td><td class="c"></td></tr>
+<tr class=""><td class="rn">84</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003bf6</span>  mvn.w r1, #10</td><td class="c"></td></tr>
+<tr class=""><td class="rn">85</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003bfa</span>  str.w r1, [r3, #128]</td><td class="c"></td></tr>
+<tr class=""><td class="rn">86</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003bfe</span>  ldr r1, [pc, #32]</td><td class="c"></td></tr>
+<tr class=""><td class="rn">87</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c00</span>  ldr r3, [r1, #4]</td><td class="c"></td></tr>
+<tr class=""><td class="rn">88</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c02</span>  orr.w r3, r3, #268435456</td><td class="c"></td></tr>
+<tr class=""><td class="rn">89</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c06</span>  str r3, [r1, #4]</td><td class="c"></td></tr>
+<tr class=""><td class="rn">90</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c08</span>  movs r3, #0</td><td class="c"></td></tr>
+<tr class=""><td class="rn">91</td><td class="c win"><span class="badge isr">PendSV FIRES</span><span class="alias">swap</span> <span class="addr">30003c0a</span>  msr BASEPRI, r3</td><td class="c"></td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem">executing in H_Task_SA(8) -- restored by PendSV, returning from k_thread_suspend() &nbsp;|&nbsp; &mdash;</td></tr>
+<tr class=""><td class="rn">92</td><td class="c win"><span class="badge isr">PendSV RETURN</span><span class="alias">swap</span> <span class="addr">30003c0e</span>  isb sy</td><td class="c"></td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem">only S_A runs these 6 instructions: the swap tail, executed by the thread PendSV switched to. It re-reads _current -- a different thread now -- and picks up the swap return value. S_B has no counterpart because nothing ever left the CPU. &nbsp;|&nbsp; &mdash;</td></tr>
+<tr class=""><td class="rn">93</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c12</span>  ldr r3, [r2, #8]</td><td class="c"></td></tr>
+<tr class=""><td class="rn">94</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c14</span>  ldr.w r0, [r3, #128]</td><td class="c"></td></tr>
+<tr class=""><td class="rn">95</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c18</span>  bx lr</td><td class="c"></td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem"><b>z_impl_k_thread_suspend</b> returns to &nbsp;|&nbsp; &mdash;</td></tr>
+<tr class=""><td class="rn">96</td><td class="c win"><span class="alias">suspend</span> <span class="addr">30003f10</span>  b.n 30003ec2</td><td class="c"></td></tr>
+<tr class=""><td class="rn">97</td><td class="c win"><span class="alias">suspend</span> <span class="addr">30003ec2</span>  ldmia.w sp!, {r3, r4, r5, r6, r7, r8, r9, pc}</td><td class="c"></td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem">&mdash; &nbsp;|&nbsp; beq.n at reschedule +014 jumps over 30003cda..30003cdf -- 2 instructions not executed</td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem">&mdash; &nbsp;|&nbsp; only S_B runs these 5 instructions: S_B&#x27;s no-swap arm: restore BASEPRI, synchronise, and return straight to the caller. This is all S_B pays where S_A pays a full context switch.</td></tr>
+<tr class=""><td class="rn">98</td><td class="c"></td><td class="c win"><span class="alias">resched</span> <span class="addr">30003ce0</span>  msr BASEPRI, r0</td></tr>
+<tr class=""><td class="rn">99</td><td class="c"></td><td class="c win"><span class="alias">resched</span> <span class="addr">30003ce4</span>  isb sy</td></tr>
+<tr class=""><td class="rn">100</td><td class="c"></td><td class="c win"><span class="alias">resched</span> <span class="addr">30003ce8</span>  pop {r3, pc}</td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem">&mdash; &nbsp;|&nbsp; <b>z_impl_k_thread_resume</b> returns to</td></tr>
+<tr class=""><td class="rn">101</td><td class="c"></td><td class="c win"><span class="alias">resume</span> <span class="addr">30003ffa</span>  pop {r4, pc}</td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem"><b>H_Task_SA</b> returns to &nbsp;|&nbsp; <b>Task_SB</b> returns to</td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem">only S_A runs this instruction: S_A stops its counter in H_Task_SA, a different thread from the one that started it, so no register still holds the DWT base and it has to be loaded again. S_B starts and stops in Task_SB, where r4 survives the call. &nbsp;|&nbsp; &mdash;</td></tr>
+<tr class=""><td class="rn">102</td><td class="c win"><span class="alias">S_A task</span> <span class="addr">300011fe</span>  ldr r3, [pc, #52]</td><td class="c"></td></tr>
+<tr class=""><td class="rn">103</td><td class="c win"><span class="badge">STOP</span><span class="alias">S_A task</span> <span class="addr">30001200</span>  ldr r2, [r3, #4]</td><td class="c win"><span class="badge">STOP</span><span class="alias">S_B task</span> <span class="addr">30001128</span>  ldr r2, [r4, #4]</td></tr>
+<tr class=""><td class="rn">104</td><td class="c"><span class="alias">S_A task</span> <span class="addr">30001202</span>  ldr r3, [pc, #52]</td><td class="c"><span class="alias">S_B task</span> <span class="addr">3000112a</span>  ldr r3, [pc, #48]</td></tr>
+<tr class=""><td class="rn">105</td><td class="c"><span class="alias">S_A task</span> <span class="addr">30001204</span>  str r2, [r3, #0]</td><td class="c"><span class="alias">S_B task</span> <span class="addr">3000112c</span>  str r2, [r3, #0]</td></tr>
+</tbody></table></div>
+
+<div class="prov"><h3>Build configuration</h3><dl><dt>Compiler</dt><dd><code>arm-none-eabi-gcc 14.2.1</code> (Arm GNU Toolchain 14.2.rel1), <code>ZEPHYR_TOOLCHAIN_VARIANT=gnuarmemb</code></dd><dt>Optimisation</dt><dd><code>-Og</code> (<code>CONFIG_DEBUG_OPTIMIZATIONS=y</code>), <code>-mcpu=cortex-m33 -mthumb -mabi=aapcs</code>, <code>-ffunction-sections -fdata-sections</code></dd><dt>Linker script</dt><dd>generated <code>zephyr/linker.cmd</code> for <code>frdm_mcxn947/mcxn947/cpu0</code>, <code>CONFIG_XIP=n</code> — text runs from RAM</dd><dt>Kernel config</dt><dd><code>CONFIG_SMP=n</code>, <code>CONFIG_USE_SWITCH=n</code>, <code>CONFIG_TRACING=n</code>, <code>CONFIG_ASSERT=n</code>, <code>CONFIG_TIMESLICING=n</code>, <code>CONFIG_EVENTS=y</code> — the set asserted by <code>sim_common.h</code></dd><dt>Extraction</dt><dd><code>arm-none-eabi-objdump -d --no-show-raw-insn</code>, with call targets in relocatable objects resolved through <code>objdump -r</code>. Rows are named by (function, offset) and the text is read back from that output; literal pools are not shown.</dd><dt>Cost</dt><dd>Instruction counts only. Arm publishes no per-instruction cycle table for Armv8-M, so cost has to be measured differentially on the target.</dd></dl></div>
+</main>
