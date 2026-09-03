@@ -93,15 +93,13 @@ code{font-family:ui-monospace,Consolas,monospace;font-size:.9em;}
 </style>
 <main>
 <h1>task_preempt — simulation vs kernel</h1>
-<p class="lead">One table per measurement that <code>zephyr_sim.c</code> in this folder provides. Scenario B resumes a thread that does not preempt the poster, so <code>k_thread_resume()</code> returns without a context switch.</p>
+<p class="lead">One table per measurement that <code>zephyr_sim.c</code> in this folder provides. Scenario B resumes a thread that does not preempt the resumer, so <code>k_thread_resume()</code> returns without a context switch.</p>
 
 <div class="legend">
   <span><i class="sw" style="background:var(--win)"></i>measurement window</span>
   <span><i class="sw" style="background:var(--markbg);border-left:3px solid var(--mark)"></i>counter capture</span>
   <span><i class="sw" style="background:var(--isrbg);border-left:3px solid var(--isr)"></i>PendSV boundary</span>
-  <span><i class="sw" style="background:var(--matchtint);border-left:3px solid var(--match)"></i>match path &mdash; the waiter's mask matched, so this waiter is unpended and made ready</span>
   <span><i class="sw" style="background:var(--fold)"></i>frame divider</span>
-  <span><i class="mkey"></i>reached through a modelled branch decision, not observed</span>
 </div>
 <h2>S_B — resume tail  (measure_thread_resume_tail)</h2>
 <p class="sub"><code>reschedule()</code> takes its no-swap arm and returns straight out. <code>z_impl_k_thread_resume()</code> calls the static <code>reschedule()</code> directly, not the public <code>z_reschedule()</code> wrapper, so the chain is two frames deep — which the simulation matches.</p>
@@ -119,11 +117,11 @@ code{font-family:ui-monospace,Consolas,monospace;font-size:.9em;}
 <tr class="mark"><td class="rn">6</td><td class="c"></td><td class="c"><span class="alias">resched</span> <span class="addr">00000014</span>  ldr r2, [r3, #4]</td></tr>
 <tr class="mark"><td class="rn">7</td><td class="c"></td><td class="c"><span class="alias">resched</span> <span class="addr">00000016</span>  ldr r3, [pc, #24]</td></tr>
 <tr class="mark"><td class="rn">8</td><td class="c"></td><td class="c"><span class="alias">resched</span> <span class="addr">00000018</span>  str r2, [r3, #0]</td></tr>
-<tr class=""><td class="rn">9</td><td class="c win"><span class="alias">resched</span> <span class="addr">300040a0</span>  msr BASEPRI, r0</td><td class="c win"><span class="alias">resched</span> <span class="addr">0000001a</span>  msr BASEPRI, r4</td></tr>
-<tr class=""><td class="rn">10</td><td class="c win"><span class="alias">resched</span> <span class="addr">300040a4</span>  isb sy</td><td class="c win"><span class="alias">resched</span> <span class="addr">0000001e</span>  isb sy</td></tr>
-<tr class=""><td class="rn">11</td><td class="c win"><span class="alias">resched</span> <span class="addr">300040a8</span>  pop {r3, pc}</td><td class="c win"><span class="alias">resched</span> <span class="addr">00000022</span>  pop {r4, pc}</td></tr>
+<tr class=""><td class="rn">9</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003d10</span>  msr BASEPRI, r0</td><td class="c win"><span class="alias">resched</span> <span class="addr">0000001a</span>  msr BASEPRI, r4</td></tr>
+<tr class=""><td class="rn">10</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003d14</span>  isb sy</td><td class="c win"><span class="alias">resched</span> <span class="addr">0000001e</span>  isb sy</td></tr>
+<tr class=""><td class="rn">11</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003d18</span>  pop {r3, pc}</td><td class="c win"><span class="alias">resched</span> <span class="addr">00000022</span>  pop {r4, pc}</td></tr>
 <tr class="frame"><td colspan="3" style="padding-left:0.7rem"><b>z_impl_k_thread_resume</b> returns to &nbsp;|&nbsp; <b>sim_z_impl_k_thread_resume_tail</b> returns to</td></tr>
-<tr class=""><td class="rn">12</td><td class="c win"><span class="alias">resume</span> <span class="addr">300043ba</span>  pop {r4, pc}</td><td class="c win"><span class="alias">resume</span> <span class="addr">0000000a</span>  pop {r4, pc}</td></tr>
+<tr class=""><td class="rn">12</td><td class="c win"><span class="alias">resume</span> <span class="addr">3000402a</span>  pop {r4, pc}</td><td class="c win"><span class="alias">resume</span> <span class="addr">0000000a</span>  pop {r4, pc}</td></tr>
 <tr class="frame"><td colspan="3" style="padding-left:0.7rem">&mdash; &nbsp;|&nbsp; <b>measure_thread_resume_tail</b> returns to</td></tr>
 <tr class="mark"><td class="lbl" colspan="3">MEASUREMENT STOP — counter capture</td></tr>
 <tr class="mark"><td class="rn">13</td><td class="c"></td><td class="c"><span class="alias">probe</span> <span class="addr">0000003c</span>  ldr r2, [r7, #4]</td></tr>
@@ -133,7 +131,7 @@ code{font-family:ui-monospace,Consolas,monospace;font-size:.9em;}
 
 <h2>S_A — swap prologue  (measure_swap_prologue_overhead)</h2>
 <p class="sub">S_A resumes a higher priority thread so <code>reschedule()</code> takes its swap arm; S_B resumes a lower priority one and takes the no-swap arm. Everything ahead of that branch is common to both and cancels in S_A − S_B, so the only prologue term left is the swap chain itself, from entry to the <code>irq_unlock()</code> where PendSV fires.</p>
-<table class="desc"><caption>Scope of this comparison</caption><tbody><tr><th class="rl">Binaries</th><td class="full" colspan="2">kernel side from the linked <code>build/zephyr/zephyr.elf</code>; simulation side compiled standalone with the same command the build uses; its addresses are section-relative rather than linked.</td></tr><tr><th class="rl">Known omission</th><td class="full" colspan="2">one instruction. <code>sim_arch_swap_prologue()</code> reproduces the kernel read-modify-write of <code>SCB-&gt;ICSR</code> with <code>SCB-&gt;ICSR |= (0UL &lt;&lt; SCB_ICSR_PENDSVSET_Pos)</code>, so the load and the store both have counterparts; only the <code>orr.w</code> at <code>z_swap_irqlock</code> +12 that actually sets the <code>PENDSVSET</code> bit has none, by design — pending PendSV would hand the CPU to the scheduler and the measurement would never close. It is shown in the table, inside the window, as a one-sided row.</td></tr><tr><th class="rl">Off-path, excluded</th><td class="full" colspan="2"><code>z_swap_irqlock</code> +22..+28 and <code>sim_z_swap_irqlock_prologue</code> +20..+26 — the reload of <code>arch.swap_return_value</code> and the return, which belong to the tail, not the prologue.</td></tr></tbody></table>
+<table class="desc"><caption>Scope of this comparison</caption><tbody><tr><th class="rl">Binaries</th><td class="full" colspan="2">kernel side from the linked <code>build/zephyr/zephyr.elf</code>; simulation side compiled standalone with the same command the build uses; its addresses are section-relative rather than linked.</td></tr><tr><th class="rl">Known omissions</th><td class="full" colspan="2">two instructions. <code>sim_arch_swap_prologue()</code> reproduces the kernel read-modify-write of <code>SCB-&gt;ICSR</code> with <code>SCB-&gt;ICSR |= (0UL &lt;&lt; SCB_ICSR_PENDSVSET_Pos)</code>, so the load and the store both have counterparts; the <code>orr.w</code> at <code>z_swap_irqlock</code> +12 that actually sets the <code>PENDSVSET</code> bit has none, by design — pending PendSV would hand the CPU to the scheduler and the measurement would never close. The <code>isb</code> at +1e has none either: the kernel unlocks through <code>arch_irq_unlock()</code>, which is <code>__set_BASEPRI(key)</code> followed by <code>barrier_isync_fence_full()</code>, while the simulation calls <code>__set_BASEPRI(0)</code> alone. Both are shown in the table, inside the window, as one-sided rows.</td></tr><tr><th class="rl">Off-path, excluded</th><td class="full" colspan="2"><code>z_swap_irqlock</code> +22..+28 and <code>sim_z_swap_irqlock_prologue</code> +22..+28 — the reload of <code>arch.swap_return_value</code> and the return, which belong to the tail, not the prologue.</td></tr></tbody></table>
 <div class="scroll"><table>
 <thead><tr><th class="rn">#</th><th>Zephyr kernel</th><th>Simulation</th></tr></thead>
 <tbody>
@@ -148,24 +146,24 @@ code{font-family:ui-monospace,Consolas,monospace;font-size:.9em;}
 <tr class="mark"><td class="rn">7</td><td class="c"></td><td class="c"><span class="alias"></span> <span class="addr">0000003c</span>  ldr r6, [pc, #36]</td></tr>
 <tr class="mark"><td class="rn">8</td><td class="c"></td><td class="c"><span class="alias"></span> <span class="addr">0000003e</span>  str r3, [r6, #0]</td></tr>
 <tr class="frame"><td colspan="3" style="padding-left:2.1rem"><b>z_swap_irqlock</b> in &nbsp;|&nbsp; <b>sim_z_swap_irqlock_prologue</b> calls</td></tr>
-<tr class=""><td class="rn">9</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fb0</span>  ldr r2, [pc, #40]</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000000</span>  ldr r3, [pc, #44]</td></tr>
-<tr class=""><td class="rn">10</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fb2</span>  ldr r3, [r2, #8]</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000002</span>  ldr r2, [r3, #8]</td></tr>
-<tr class=""><td class="rn">11</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fb4</span>  str r0, [r3, #124]</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000004</span>  str r0, [r2, #124]</td></tr>
-<tr class=""><td class="rn">12</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fb6</span>  mvn.w r1, #10</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000006</span>  mvn.w r1, #10</td></tr>
-<tr class=""><td class="rn">13</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fba</span>  str.w r1, [r3, #128]</td><td class="c win"><span class="alias">swap</span> <span class="addr">0000000a</span>  str.w r1, [r2, #128]</td></tr>
-<tr class=""><td class="rn">14</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fbe</span>  ldr r1, [pc, #32]</td><td class="c win"><span class="alias">swap</span> <span class="addr">0000000e</span>  ldr r2, [pc, #36]</td></tr>
-<tr class=""><td class="rn">15</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fc0</span>  ldr r3, [r1, #4]</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000010</span>  ldr r1, [r2, #4]</td></tr>
-<tr class=""><td class="rn">16</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fc2</span>  orr.w r3, r3, #268435456</td><td class="c"></td></tr>
-<tr class=""><td class="rn">17</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fc6</span>  str r3, [r1, #4]</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000012</span>  str r1, [r2, #4]</td></tr>
-<tr class=""><td class="rn">18</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fc8</span>  movs r3, #0</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000014</span>  movs r2, #0</td></tr>
+<tr class=""><td class="rn">9</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c20</span>  ldr r2, [pc, #40]</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000000</span>  ldr r3, [pc, #40]</td></tr>
+<tr class=""><td class="rn">10</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c22</span>  ldr r3, [r2, #8]</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000002</span>  ldr r2, [r3, #8]</td></tr>
+<tr class=""><td class="rn">11</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c24</span>  str r0, [r3, #124]</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000004</span>  str r0, [r2, #124]</td></tr>
+<tr class=""><td class="rn">12</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c26</span>  mvn.w r1, #10</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000006</span>  mvn.w r1, #10</td></tr>
+<tr class=""><td class="rn">13</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c2a</span>  str.w r1, [r3, #128]</td><td class="c win"><span class="alias">swap</span> <span class="addr">0000000a</span>  str.w r1, [r2, #128]</td></tr>
+<tr class=""><td class="rn">14</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c2e</span>  ldr r1, [pc, #32]</td><td class="c win"><span class="alias">swap</span> <span class="addr">0000000e</span>  ldr r2, [pc, #32]</td></tr>
+<tr class=""><td class="rn">15</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c30</span>  ldr r3, [r1, #4]</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000010</span>  ldr r1, [r2, #4]</td></tr>
+<tr class=""><td class="rn">16</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c32</span>  orr.w r3, r3, #268435456</td><td class="c"></td></tr>
+<tr class=""><td class="rn">17</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c36</span>  str r3, [r1, #4]</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000012</span>  str r1, [r2, #4]</td></tr>
+<tr class=""><td class="rn">18</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c38</span>  movs r3, #0</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000014</span>  movs r2, #0</td></tr>
 <tr class="isr"><td class="lbl" colspan="3">PendSV — the thread leaves and regains the CPU here</td></tr>
-<tr class="isr"><td class="rn">19</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fca</span>  msr BASEPRI, r3</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000016</span>  msr BASEPRI, r2</td></tr>
-<tr class=""><td class="rn">20</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fce</span>  isb sy</td><td class="c win"><span class="alias">swap</span> <span class="addr">0000001a</span>  isb sy</td></tr>
+<tr class="isr"><td class="rn">19</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c3a</span>  msr BASEPRI, r3</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000016</span>  msr BASEPRI, r2</td></tr>
+<tr class=""><td class="rn">20</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c3e</span>  isb sy</td><td class="c"></td></tr>
 <tr class="mark"><td class="lbl" colspan="3">MEASUREMENT STOP — counter capture</td></tr>
-<tr class="mark"><td class="rn">21</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">0000001e</span>  ldr r2, [pc, #24]</td></tr>
-<tr class="mark"><td class="rn">22</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">00000020</span>  ldr r1, [r2, #4]</td></tr>
-<tr class="mark"><td class="rn">23</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">00000022</span>  ldr r2, [pc, #24]</td></tr>
-<tr class="mark"><td class="rn">24</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">00000024</span>  str r1, [r2, #0]</td></tr>
+<tr class="mark"><td class="rn">21</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">0000001a</span>  ldr r2, [pc, #24]</td></tr>
+<tr class="mark"><td class="rn">22</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">0000001c</span>  ldr r1, [r2, #4]</td></tr>
+<tr class="mark"><td class="rn">23</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">0000001e</span>  ldr r2, [pc, #24]</td></tr>
+<tr class="mark"><td class="rn">24</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">00000020</span>  str r1, [r2, #0]</td></tr>
 </tbody></table></div>
 
 <h2>S_A — suspend tail  (measure_thread_suspend_tail)</h2>
@@ -176,7 +174,7 @@ code{font-family:ui-monospace,Consolas,monospace;font-size:.9em;}
 <tbody>
 <tr class="frame"><td colspan="3" style="padding-left:3.5rem"><b>z_swap_irqlock</b> in &nbsp;|&nbsp; <b>sim_z_swap_irqlock_tail</b> in</td></tr>
 <tr class="isr"><td class="lbl" colspan="3">PendSV — the thread leaves and regains the CPU here</td></tr>
-<tr class="isr"><td class="rn">1</td><td class="c"><span class="alias">swap</span> <span class="addr">30003fca</span>  msr BASEPRI, r3</td><td class="c"></td></tr>
+<tr class="isr"><td class="rn">1</td><td class="c"><span class="alias">swap</span> <span class="addr">30003c3a</span>  msr BASEPRI, r3</td><td class="c"></td></tr>
 <tr class="mark"><td class="lbl" colspan="3">MEASUREMENT START — counter capture</td></tr>
 <tr class="mark"><td class="rn">2</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">00000008</span>  ldr r3, [pc, #36]</td></tr>
 <tr class="mark"><td class="rn">3</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">0000000a</span>  movs r1, #0</td></tr>
@@ -186,13 +184,13 @@ code{font-family:ui-monospace,Consolas,monospace;font-size:.9em;}
 <tr class="mark"><td class="rn">7</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">00000016</span>  ldr r1, [r3, #4]</td></tr>
 <tr class="mark"><td class="rn">8</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">00000018</span>  ldr r3, [pc, #24]</td></tr>
 <tr class="mark"><td class="rn">9</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">0000001a</span>  str r1, [r3, #0]</td></tr>
-<tr class=""><td class="rn">10</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fce</span>  isb sy</td><td class="c win"><span class="alias">swap</span> <span class="addr">0000001c</span>  isb sy</td></tr>
-<tr class=""><td class="rn">11</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fd2</span>  ldr r3, [r2, #8]</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000020</span>  ldr r3, [r2, #8]</td></tr>
-<tr class=""><td class="rn">12</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fd4</span>  ldr.w r0, [r3, #128]</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000022</span>  ldr.w r0, [r3, #128]</td></tr>
-<tr class=""><td class="rn">13</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fd8</span>  bx lr</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000026</span>  bx lr</td></tr>
+<tr class=""><td class="rn">10</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c3e</span>  isb sy</td><td class="c win"><span class="alias">swap</span> <span class="addr">0000001c</span>  isb sy</td></tr>
+<tr class=""><td class="rn">11</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c42</span>  ldr r3, [r2, #8]</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000020</span>  ldr r3, [r2, #8]</td></tr>
+<tr class=""><td class="rn">12</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c44</span>  ldr.w r0, [r3, #128]</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000022</span>  ldr.w r0, [r3, #128]</td></tr>
+<tr class=""><td class="rn">13</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003c48</span>  bx lr</td><td class="c win"><span class="alias">swap</span> <span class="addr">00000026</span>  bx lr</td></tr>
 <tr class="frame"><td colspan="3" style="padding-left:2.1rem"><b>z_impl_k_thread_suspend</b> returns to &nbsp;|&nbsp; <b>sim_z_impl_k_thread_suspend_tail</b> returns to</td></tr>
-<tr class=""><td class="rn">14</td><td class="c win"><span class="alias">suspend</span> <span class="addr">300042d0</span>  b.n 30004282</td><td class="c win"><span class="alias">suspend</span> <span class="addr">0000001a</span>  b.n 10</td></tr>
-<tr class=""><td class="rn">15</td><td class="c win"><span class="alias">suspend</span> <span class="addr">30004282</span>  ldmia.w sp!, {r3, r4, r5, r6, r7, r8, r9, pc}</td><td class="c win"><span class="alias">suspend</span> <span class="addr">00000010</span>  ldmia.w sp!, {r3, r4, r5, r6, r7, r8, r9, pc}</td></tr>
+<tr class=""><td class="rn">14</td><td class="c win"><span class="alias">suspend</span> <span class="addr">30003f40</span>  b.n 30003ef2</td><td class="c win"><span class="alias">suspend</span> <span class="addr">0000001a</span>  b.n 10</td></tr>
+<tr class=""><td class="rn">15</td><td class="c win"><span class="alias">suspend</span> <span class="addr">30003ef2</span>  ldmia.w sp!, {r3, r4, r5, r6, r7, r8, r9, pc}</td><td class="c win"><span class="alias">suspend</span> <span class="addr">00000010</span>  ldmia.w sp!, {r3, r4, r5, r6, r7, r8, r9, pc}</td></tr>
 <tr class="frame"><td colspan="3" style="padding-left:0.7rem">&mdash; &nbsp;|&nbsp; <b>measure_thread_suspend_tail</b> returns to</td></tr>
 <tr class="mark"><td class="lbl" colspan="3">MEASUREMENT STOP — counter capture</td></tr>
 <tr class="mark"><td class="rn">16</td><td class="c"></td><td class="c"><span class="alias">probe</span> <span class="addr">0000003e</span>  ldr r2, [r7, #4]</td></tr>
