@@ -52,8 +52,6 @@ static BMTH_measurement_series_t scenario_a = {
   .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
 static BMTH_measurement_series_t wait_tail_no_wait = {
   .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
-static BMTH_measurement_series_t wait_prologue = {
-  .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
 static BMTH_measurement_series_t z_swap_overhead = {
   .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
 
@@ -128,7 +126,7 @@ static void L_Task_SA(void *p1, void *p2, void *p3)
     if (BMTH_mseries_iterate(&scenario_a, test_start_time, test_stop_time)
         == BMTH_MEASUREMENT_WINDOW_COMPLETED_WITH_JITTER)
     {
-      BMTH_signalize_jitter_detected();
+      __NOP();
     }
     BMTH_mwindow_close(&scenario_a);
     k_event_post(&test_event, SIGNALIZE_YIELD_EVENT_MASK); /* Yield to I_Task */
@@ -169,12 +167,12 @@ static void H_Task_SB(void *p1, void *p2, void *p3)
     BMTH_RESET_COUNTER(); /* S_B */
     BMTH_GET_START_CNT(test_start_time);
     k_event_wait_safe(&test_event, SCENARIO_B_EVENT_MASK, false,
-                      K_FOREVER); /* S_B */
+                      K_NO_WAIT); /* S_B */
     BMTH_GET_STOP_CNT(test_stop_time);
     if (BMTH_mseries_iterate(&scenario_b, test_start_time, test_stop_time)
         == BMTH_MEASUREMENT_WINDOW_COMPLETED_WITH_JITTER)
     {
-      BMTH_signalize_jitter_detected();
+      __NOP();
     }
     BMTH_mwindow_close(&scenario_b);
     k_event_post(&test_event, SIGNALIZE_YIELD_EVENT_MASK); /* Yield to I_Task */
@@ -189,6 +187,7 @@ static void dummy_task(void *p1, void *p2, void *p3)
 
   while (1)
   {
+    BMTH_mwindow_close(&scenario_a);
     k_event_wait_safe(&test_event, *(uint32_t *) p1, false, K_FOREVER);
   }
 }
@@ -200,6 +199,15 @@ static void I_Task(void *p1, void *p2, void *p3)
   ARG_UNUSED(p3);
 
   k_event_init(&test_event);
+
+  uint32_t dummy_task_event_mask = SCENARIO_A_EVENT_MASK;
+
+  for (uint32_t i = 0; i < dummy_count; i++)
+  {
+    k_thread_create(&sa_dummy_threads[i], sa_dummy_stacks[i], THREAD_STACK_SIZE,
+                    dummy_task, (void *) &dummy_task_event_mask, NULL, NULL,
+                    sa_dummy_prios[i], 0, K_NO_WAIT);
+  }
 
   k_thread_create(&sa_high_prio_thread, sa_high_prio_stack, THREAD_STACK_SIZE,
                   H_Task_SA, NULL, NULL, NULL, SA_HIGH_PRIO_THREAD_PRIORITY, 0,
@@ -219,14 +227,12 @@ static void I_Task(void *p1, void *p2, void *p3)
   k_thread_abort(&sa_low_prio_thread);
   k_thread_abort(&sa_high_prio_thread);
 
-  uint32_t dummy_task_event_mask = SCENARIO_B_EVENT_MASK;
-
   for (uint32_t i = 0; i < dummy_count; i++)
   {
-    k_thread_create(&sb_dummy_threads[i], sb_dummy_stacks[i], THREAD_STACK_SIZE,
-                    dummy_task, (void *) &dummy_task_event_mask, NULL, NULL,
-                    sb_dummy_prios[i], 0, K_NO_WAIT);
+    k_thread_abort(&sa_dummy_threads[i]);
   }
+
+  k_event_clear(&test_event, SCENARIO_A_EVENT_MASK);
 
   k_thread_create(&sb_high_prio_thread, sb_high_prio_stack, THREAD_STACK_SIZE,
                   H_Task_SB, NULL, NULL, NULL, SB_HIGH_PRIO_THREAD_PRIORITY, 0,
@@ -289,8 +295,6 @@ int main(void)
 
   /* The K_NO_WAIT wait, which returns without ever pending. */
   measure_wait_tail_no_wait_overhead(&wait_tail_no_wait, MEASUREMENT_COUNT);
-  /* The wait chain up to the irq_unlock() where PendSV would fire. */
-  measure_wait_overhead(&wait_prologue, MEASUREMENT_COUNT, SIM_WAIT_PROLOGUE);
 
   BMTH_signalize_mseries_start();
 

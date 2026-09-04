@@ -154,6 +154,7 @@ SIM_FRAME static uint32_t sim_k_event_wait_internal_tail(
     BMTH_RESET_CNTR();
     BMTH_GET_START_CNT(sim_test_start_time);
     irq_unlock(0);
+    __asm__ volatile("mov r0, r0"); // quick compensation
     goto out;
   }
 
