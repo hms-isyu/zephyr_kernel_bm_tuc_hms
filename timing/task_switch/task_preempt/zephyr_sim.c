@@ -77,11 +77,11 @@ SIM_ALWAYS_INLINE static inline void measure_resume_tail(
  ******************************************************************************/
 
 /* S_A resumes a higher priority thread, so reschedule() takes its swap arm; S_B
- * resumes a lower priority one and takes the no-swap arm. Everything before that
- * branch -- k_thread_resume() entry, the spinlock, ready_thread(), reschedule()
- * itself -- is common to both, so S_A - S_B cancels it. The only prologue term
- * left to account for is the swap chain itself, from its entry to the
- * irq_unlock() where PendSV fires. */
+ * resumes a lower priority one and takes the no-swap arm. Everything before
+ * that branch -- k_thread_resume() entry, the spinlock, ready_thread(),
+ * reschedule() itself -- is common to both, so S_A - S_B cancels it. The only
+ * prologue term left to account for is the swap chain itself, from its entry to
+ * the irq_unlock() where PendSV fires. */
 SIM_ALWAYS_INLINE static inline void measure_swap_prologue(
   BMTH_measurement_series_t *mseries)
 {
@@ -179,7 +179,7 @@ void measure_thread_suspend_tail(BMTH_measurement_series_t *mseries,
 
   BMTH_mseries_initialize(
     mseries, 0, NULL,
-    BMTH_MEASUREMENT_READ_WINDOW_CROSS_FUNCTIONS_FILE_SCOPE_VARS);
+    BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
   for (uint32_t i = 0; i < loop_count; i++)
   {
     measure_suspend_tail(mseries);
@@ -195,7 +195,7 @@ void measure_thread_resume_tail(BMTH_measurement_series_t *mseries,
 
   BMTH_mseries_initialize(
     mseries, 0, NULL,
-    BMTH_MEASUREMENT_READ_WINDOW_CROSS_FUNCTIONS_FILE_SCOPE_VARS);
+    BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
   for (uint32_t i = 0; i < loop_count; i++)
   {
     measure_resume_tail(mseries);

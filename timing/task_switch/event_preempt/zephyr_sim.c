@@ -158,9 +158,16 @@ void measure_event_z_swap_overhead(BMTH_measurement_series_t *mseries,
 
   sim_kernel_init();
 
+  /* The read overhead a window carries depends on where its stop capture sits,
+   * so it has to be picked per arm, not per function. A stop taken inside the
+   * simulated chain rematerialises the counter base from the literal pool and
+   * pays the cross-function read; one taken in the probe finds the base still
+   * in a callee-saved register and pays the memory-access read. */
   BMTH_mseries_initialize(
     mseries, 0, NULL,
-    BMTH_MEASUREMENT_READ_WINDOW_CROSS_FUNCTIONS_FILE_SCOPE_VARS);
+    (part == SIM_Z_SWAP_PROLOGUE)
+      ? BMTH_MEASUREMENT_READ_WINDOW_CROSS_FUNCTIONS_FILE_SCOPE_VARS
+      : BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
   for (uint32_t i = 0; i < loop_count; i++)
   {
     measure_event_z_swap(mseries, part);
@@ -194,7 +201,11 @@ SIM_FRAME static uint32_t sim_k_event_wait_internal_tail(
 
   ARG_UNUSED(unused);
 
-  __asm__ volatile("" ::: "r9", "r10", "r11");
+  /* k_event_wait_internal() holds r4..r11 across the swap, so its frame pushes
+   * and pops {r4, r5, r6, r7, r8, r9, sl, fp, lr}. Without r8 in the clobber
+   * list the simulation saves one register fewer and its ldmia.w -- which is
+   * inside the measured window -- costs one word less than the kernel's. */
+  __asm__ volatile("" ::: "r8", "r9", "r10", "r11");
 
   if (events == 0U)
   {
@@ -360,9 +371,12 @@ void measure_wait_overhead(BMTH_measurement_series_t *mseries,
   }
   else if (part == SIM_WAIT_PROLOGUE)
   {
+    /* This arm stops inside sim_arch_swap_prologue(), which reloads the counter
+     * base from the literal pool -- unlike the tail arm above, which stops in
+     * the probe with the base still in a register. */
     BMTH_mseries_initialize(
       mseries, 0, NULL,
-      BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
+      BMTH_MEASUREMENT_READ_WINDOW_CROSS_FUNCTIONS_FILE_SCOPE_VARS);
     for (uint32_t i = 0; i < loop_count; i++)
     {
       measure_wait_prologue(mseries, K_FOREVER);

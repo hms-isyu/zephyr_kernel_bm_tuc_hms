@@ -129,7 +129,11 @@ SIM_FRAME static uint32_t sim_k_event_wait_internal_tail(
 
   ARG_UNUSED(unused);
 
-  __asm__ volatile("" ::: "r9", "r10", "r11");
+  /* k_event_wait_internal() holds r4..r11 across the swap, so its frame pushes
+   * and pops {r4, r5, r6, r7, r8, r9, sl, fp, lr}. Without r8 in the clobber
+   * list the simulation saves one register fewer and its ldmia.w -- which is
+   * inside the measured window -- costs one word less than the kernel's. */
+  __asm__ volatile("" ::: "r8", "r9", "r10", "r11");
 
   if (events == 0U)
   {
