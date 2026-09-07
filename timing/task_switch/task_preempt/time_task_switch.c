@@ -15,8 +15,6 @@
  * Definitions
  ******************************************************************************/
 
-#define TEST_CASE 2
-
 #include "benchmark_testcases.h"
 
 #define THREAD_STACK_SIZE 512
