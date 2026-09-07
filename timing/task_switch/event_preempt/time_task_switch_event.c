@@ -160,13 +160,13 @@ static void H_Task_SB(void *p1, void *p2, void *p3)
   ARG_UNUSED(p1);
   ARG_UNUSED(p2);
   ARG_UNUSED(p3);
-
   k_event_wait_safe(&test_event, START_EVENT_MASK, false,
                     K_FOREVER); /* Started? */
   while (1)
   {
     k_thread_suspend(k_current_get());
 #if (TEST_SB_HAS_WAITER == 0x0U)
+    __asm volatile("nop;"); /* fetch parity */
     k_thread_resume(&sb_low_prio_thread);
 #endif
     BMTH_mwindow_open(&scenario_b);
