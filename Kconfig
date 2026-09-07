@@ -55,6 +55,26 @@ config BENCHMARK_TEST_SEM_TASK_SWITCH_PREEMPT
       k_sem_take(). S_B gives with no waiter, or with a waiter that cannot
       preempt the giver.
 
+config BENCHMARK_TEST_INTERRUPT_RESPONSE_TIME
+    bool "Interrupt latency via a self-induced interrupt"
+    help
+      timing/interrupt_latency/time_interrupt_latency.c
+
+      S_A measures from the API that pends the interrupt to the first
+      instruction the aperiodic task runs after the ISR released it:
+      exception entry, _isr_wrapper dispatch, the release call, the
+      PendSV switch pended by z_arm_exc_exit() and the return into the
+      task. S_B measures the same pend API alone, with the line disabled
+      in the NVIC so no exception is taken. S_A - S_B is the
+      interrupt-to-task path.
+
+      TEST_CASE_I releases with k_thread_resume() against a
+      self-suspended task, TEST_CASE_II with k_sem_give() against a
+      pending waiter, TEST_CASE_III with k_event_post() against a
+      waiter in k_event_wait_safe(). The semaphore and the event use a
+      release object of their own, so the ISR never walks a wait queue
+      holding anything but the aperiodic task.
+
 endchoice
 
 source "Kconfig.zephyr"

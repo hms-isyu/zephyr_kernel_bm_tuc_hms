@@ -40,6 +40,9 @@ target_sources_ifdef(CONFIG_BENCHMARK_TEST_TASK_SWITCH_PREEMPT app PRIVATE
                      timing/task_switch/task_preempt/time_task_switch.c
                      timing/task_switch/task_preempt/zephyr_sim.c)
 
+target_sources_ifdef(CONFIG_BENCHMARK_TEST_INTERRUPT_RESPONSE_TIME app PRIVATE
+                     timing/interrupt_latency/time_interrupt_response.c)
+
 target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_TASK_SWITCH_PREEMPT app PRIVATE
                                 timing/task_switch/task_preempt)
 target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_TASK_SWITCH_CHANGE app PRIVATE
@@ -50,6 +53,8 @@ target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_EVENT_TASK_SWITCH_BLOCK a
                            timing/task_switch/event_block)
 target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_SEM_TASK_SWITCH_PREEMPT app PRIVATE
                            timing/task_switch/sem_preempt)
+target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_INTERRUPT_RESPONSE_TIME app PRIVATE
+                           timing/interrupt_latency)
 
 # HMS benchmark package
 set(benchmark_path ${CMAKE_CURRENT_SOURCE_DIR}/packages/benchmark_hms)
