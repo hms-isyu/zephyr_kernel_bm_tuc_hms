@@ -58,7 +58,7 @@ config BENCHMARK_TEST_SEM_TASK_SWITCH_PREEMPT
 config BENCHMARK_TEST_INTERRUPT_RESPONSE_TIME
     bool "Interrupt latency via a self-induced interrupt"
     help
-      timing/interrupt_latency/time_interrupt_latency.c
+      timing/interrupt_latency/time_interrupt_response.c
 
       S_A measures from the API that pends the interrupt to the first
       instruction the aperiodic task runs after the ISR released it:
@@ -73,7 +73,210 @@ config BENCHMARK_TEST_INTERRUPT_RESPONSE_TIME
       pending waiter, TEST_CASE_III with k_event_post() against a
       waiter in k_event_wait_safe(). The semaphore and the event use a
       release object of their own, so the ISR never walks a wait queue
-      holding anything but the aperiodic task.
+      holding anything but the aperiodic task. TEST_CASE_IV drops the
+      release and closes the window on the first instruction of the ISR
+      body.
+
+      TEST_CASE_V, VI, VII and VIII repeat I, II, III and IV with the
+      handler placed in the vector table by IRQ_DIRECT_CONNECT()
+      instead of the software ISR table, so the pairs I/V, II/VI,
+      III/VII and IV/VIII differ only by the _isr_wrapper dispatch.
+
+config BENCHMARK_TEST_IPC_MAILBOX_ASYNC
+    bool "Message passing via k_mbox, asynchronous"
+    help
+      timing/ipc/mailbox/mailbox_async.c
+
+      Three windows over k_mbox_async_put() -> k_mbox_get(), each swept
+      over a message size of 4 to 1024 bytes, doubling at each of the
+      nine steps, with one series per size.
+
+      T1 sends to the sending thread itself: the window covers the put,
+      the match against the thread's own message on the tx queue and the
+      copy, with no context switch. T2 sends to a waiter of higher
+      priority, which preempts the sender inside the put, so the window
+      adds the switch and closes on the receiver's k_mbox_get(). T3 sends
+      to a waiter of lower priority, which runs only once the sender
+      blocks, so the window also carries the sender's block.
+
+      T2 and T3 are released by a third thread, T_ArmUp / T_ArmDown,
+      priority 4 - below both measured threads. It can only be scheduled
+      once the sender is blocked on the baton and the receiver is
+      pending in k_mbox_get(), so giving the baton from there guarantees
+      the receiver is already waiting when the put arrives. Both windows
+      therefore take the same mbox_message_match() path, and the pair
+      differs by the priority relation alone rather than by which path
+      the message took. It also keeps the receiver's loop prologue out
+      of the window, since no window can open until the receiver pends.
+
+      The asynchronous put is what makes T1 possible at all - a
+      synchronous k_mbox_put() pends the sender until a receiver
+      consumes, so a thread cannot send to itself - and it is used in T2
+      and T3 as well to keep one send path across the three windows. It
+      requires NUM_MBOX_ASYNC_MSGS > 0.
+
+config BENCHMARK_TEST_IPC_FIFO
+    bool "Message passing via k_fifo"
+    help
+      timing/ipc/fifo/fifo.c
+
+      The same three windows and the same nine sweep points as the
+      k_mbox test, over k_fifo_put() -> k_fifo_get().
+
+      k_fifo passes a reference: the kernel links the caller's item into
+      the queue through the word the item reserves at its front, and
+      hands the receiver that pointer. Nothing is copied, by the kernel
+      or by the test, so the window holds the transfer alone and the
+      sweep is a control rather than a variable - the nine points are the
+      same measurement, and any spread across them is noise, not a cost
+      of message size.
+
+      T2 and T3 both hit the direct handoff: the releaser thread
+      (priority 4, below both measured threads) hands the sender its
+      baton only once the receiver is pending in k_fifo_get(), so no
+      list node is built in either. T1 has no second thread and is the
+      only window that goes through the queue's list.
+
+config BENCHMARK_TEST_IPC_LIFO
+    bool "Message passing via k_lifo"
+    help
+      timing/ipc/lifo/lifo.c
+
+      Identical to the k_fifo test except for the object, so the pair
+      isolates what the insertion end costs: k_lifo prepends where
+      k_fifo appends, and k_fifo_put() has to walk to the list tail
+      first. Everything else - item layout, the three windows, the
+      sweep - is the same.
+
+config BENCHMARK_TEST_IPC_STACK
+    bool "Message passing via k_stack"
+    help
+      timing/ipc/stack/stack.c
+
+      The same three windows and sweep, over k_stack_push() ->
+      k_stack_pop().
+
+      k_stack passes one word by value, out of a fixed array sized at
+      k_stack_init(); the test pushes the address of the item, so
+      nothing is copied here either. Unlike k_fifo the item needs no
+      reserved word and no list node is ever built, which is what the
+      comparison against it isolates.
+
+config BENCHMARK_TEST_IPC_MSGQ
+    bool "Message passing via k_msgq"
+    help
+      timing/ipc/msgq/msgq.c
+
+      The same three windows and sweep, over k_msgq_put() ->
+      k_msgq_get(). The message size is fixed at k_msgq_init(), so the
+      sweep uses one queue per size, all initialized before the
+      measurement starts.
+
+      k_msgq copies by value, and how often depends on whether a reader
+      is pending. T2 and T3 are released by the releaser thread only
+      once the receiver is pending, so the put copies straight into the
+      reader's buffer - one copy. T1 has no second thread: the put
+      copies into the ring buffer and the get copies back out of it -
+      two copies. k_mbox has no ring and always copies once, so the pair
+      separates the buffering from the transfer.
+
+config BENCHMARK_TEST_IPC_PIPE_ASYNC
+    bool "Message passing via k_pipe, buffered"
+    help
+      timing/ipc/pipe/pipe_async.c
+
+      The same three windows and sweep, over k_pipe_write() ->
+      k_pipe_read().
+
+      k_pipe copies by value through a byte ring buffer, and splits the
+      same way as k_msgq: with a reader already pending,
+      copy_to_pending_readers() copies straight into the reader's stack
+      buffer and unpends it without touching the ring - one copy - which
+      is the path T2 and T3 take, since the releaser thread lets the
+      write start only once the receiver pends in k_pipe_read(). T1 has
+      no second thread, so the write copies into the ring and the read
+      copies back out - two copies.
+
+      Against k_msgq the object is byte-oriented rather than
+      message-oriented: the transfer length is an argument to each call
+      instead of being fixed at k_msgq_init(), so one pipe per window
+      covers all nine sweep points where k_msgq needs one queue per
+      size. The ring is MESSAGE_SIZE_MAX bytes and every sweep size
+      divides it evenly, so the write head returns to an aligned offset
+      each iteration and no message straddles the wrap - one memcpy per
+      ring_buf_put() and ring_buf_get() at every point, rather than two
+      at the sizes that would otherwise split.
+
+config BENCHMARK_TEST_IPC_MAILBOX_SYNC
+    bool "Message passing via k_mbox, synchronous"
+    help
+      timing/ipc/mailbox/mailbox_sync.c
+
+      The k_mbox test reduced to the two cross-thread windows and driven
+      by the synchronous k_mbox_put() instead of k_mbox_async_put(). Two
+      threads and no releaser: the rendezvous does what the baton did.
+
+      k_mbox_put() returns only once the receiver has disposed of the
+      message, so each direction settles into one repeating path from
+      the first iteration. T1 (send to a higher priority receiver): the
+      receiver is already pending, the put matches it and pends the
+      sender, and the receiver preempts. T2 (send to a lower priority
+      receiver): the sender reaches the put first, pends on the tx
+      queue, and the receiver's get matches it there. Neither needs a
+      third thread to establish who waits for whom.
+
+      The window opens on the sender in both directions and closes on
+      whichever thread is running when the transaction completes, which
+      the priority relation decides. mbox_message_dispose() readies the
+      sender and reschedules from inside k_mbox_get(), after the memcpy:
+      in T1 the sender is the lower thread and does not preempt, so the
+      receiver closes; in T2 the sender is the higher thread and takes
+      the CPU back there, so the put returns and the sender closes. Both
+      windows therefore hold the whole transfer and nothing else, and
+      the memcpy is inside both - k_mbox_put() only exchanges
+      descriptors, the copy is always k_mbox_data_get() on the receiver.
+
+      The two windows are fully separated: a sender and a receiver of
+      their own, a mailbox of their own, and a phase of their own, with
+      I_Task creating each pair and aborting it before the next starts.
+      Nothing is shared between them but the message buffers, so the
+      pair differs by the priority relation alone.
+
+      The self-send window of the asynchronous test has no counterpart
+      here - a synchronous put pends until a receiver consumes, so a
+      thread cannot send to itself.
+
+config BENCHMARK_TEST_IPC_PIPE_SYNC
+    bool "Message passing via k_pipe, bufferless"
+    help
+      timing/ipc/pipe/pipe_sync.c
+
+      The k_pipe test in the same two thread shape as the synchronous
+      k_mbox test, with the pipe initialized with no ring buffer at all.
+      With nowhere to deposit bytes, k_pipe_write() can only complete by
+      copying into a reader that is already pending, and otherwise
+      blocks on the space wait queue - so the transfer is a rendezvous
+      and the releaser is again unnecessary.
+
+      T1 (write to a higher priority reader) is the clean case:
+      copy_to_pending_readers() copies and unpends the reader inside
+      k_pipe_write(), the reschedule hands it the CPU, and it closes the
+      window on the return from k_pipe_read(). The window holds the
+      write, the copy and the switch.
+
+      T2 (write to a lower priority reader) does not close as tightly,
+      and the difference is a property of the API rather than of the
+      test. k_pipe_write() returns once the bytes are handed over, not
+      once the reader has consumed them, so it is not the full
+      rendezvous that k_mbox_put() is: there is no point at which the
+      writer is held until the reader has closed a window. The steady
+      state is one repeating cycle - the writer blocks on the space
+      queue, the reader's k_pipe_read() wakes it, the copy runs on the
+      writer and the window closes there - so the series is repeatable,
+      but it spans the reader's return from the previous transfer and
+      its loop back into k_pipe_read() as well as the transfer itself.
+      T2 is therefore an upper bound on the transfer, and is not
+      comparable to the k_mbox T2 window; T1 is.
 
 endchoice
 

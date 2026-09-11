@@ -17,7 +17,7 @@
 
 /* Memory configuration */
 
-/* Code is linked into SRAMX (CONFIG_XIP=n), so the MPU must treat it as flash. */
+/* Code is linked into System Bus (CONFIG_XIP=n), so the MPU must treat it as flash. */
 &sramx {
 	zephyr,memory-attr = <DT_MEM_ARM(ATTR_MPU_FLASH)>;
 };

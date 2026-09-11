@@ -43,6 +43,30 @@ target_sources_ifdef(CONFIG_BENCHMARK_TEST_TASK_SWITCH_PREEMPT app PRIVATE
 target_sources_ifdef(CONFIG_BENCHMARK_TEST_INTERRUPT_RESPONSE_TIME app PRIVATE
                      timing/interrupt_latency/time_interrupt_response.c)
 
+target_sources_ifdef(CONFIG_BENCHMARK_TEST_IPC_MAILBOX_ASYNC app PRIVATE
+                     timing/ipc/mailbox/mailbox_async.c)
+
+target_sources_ifdef(CONFIG_BENCHMARK_TEST_IPC_FIFO app PRIVATE
+                     timing/ipc/fifo/fifo.c)
+
+target_sources_ifdef(CONFIG_BENCHMARK_TEST_IPC_LIFO app PRIVATE
+                     timing/ipc/lifo/lifo.c)
+
+target_sources_ifdef(CONFIG_BENCHMARK_TEST_IPC_STACK app PRIVATE
+                     timing/ipc/stack/stack.c)
+
+target_sources_ifdef(CONFIG_BENCHMARK_TEST_IPC_MSGQ app PRIVATE
+                     timing/ipc/msgq/msgq.c)
+
+target_sources_ifdef(CONFIG_BENCHMARK_TEST_IPC_PIPE_ASYNC app PRIVATE
+                     timing/ipc/pipe/pipe_async.c)
+
+target_sources_ifdef(CONFIG_BENCHMARK_TEST_IPC_MAILBOX_SYNC app PRIVATE
+                     timing/ipc/mailbox/mailbox_sync.c)
+
+target_sources_ifdef(CONFIG_BENCHMARK_TEST_IPC_PIPE_SYNC app PRIVATE
+                     timing/ipc/pipe/pipe_sync.c)
+
 target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_TASK_SWITCH_PREEMPT app PRIVATE
                                 timing/task_switch/task_preempt)
 target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_TASK_SWITCH_CHANGE app PRIVATE
@@ -55,6 +79,22 @@ target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_SEM_TASK_SWITCH_PREEMPT a
                            timing/task_switch/sem_preempt)
 target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_INTERRUPT_RESPONSE_TIME app PRIVATE
                            timing/interrupt_latency)
+target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_IPC_MAILBOX_ASYNC app PRIVATE
+                           timing/ipc/mailbox)
+target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_IPC_FIFO app PRIVATE
+                           timing/ipc/fifo)
+target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_IPC_LIFO app PRIVATE
+                           timing/ipc/lifo)
+target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_IPC_STACK app PRIVATE
+                           timing/ipc/stack)
+target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_IPC_MSGQ app PRIVATE
+                           timing/ipc/msgq)
+target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_IPC_PIPE_ASYNC app PRIVATE
+                           timing/ipc/pipe)
+target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_IPC_MAILBOX_SYNC app PRIVATE
+                           timing/ipc/mailbox)
+target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_IPC_PIPE_SYNC app PRIVATE
+                           timing/ipc/pipe)
 
 # HMS benchmark package
 set(benchmark_path ${CMAKE_CURRENT_SOURCE_DIR}/packages/benchmark_hms)
