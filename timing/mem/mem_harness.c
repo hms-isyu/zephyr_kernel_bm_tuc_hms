@@ -642,10 +642,10 @@ static void mem_run_w4(void)
       }
 
       {
-        const size_t span      = (size_t) (high - low) + bytes;
-        const size_t reported  = mem_allocator_used_bytes();
-        const size_t deviation = (span > reported) ? (span - reported)
-                                                   : (reported - span);
+        const size_t span     = (size_t) (high - low) + bytes;
+        const size_t reported = mem_allocator_used_bytes();
+        const size_t deviation =
+          (span > reported) ? (span - reported) : (reported - span);
 
         if (deviation > (size_t) (MEM_ARENA_SIZE / 8U))
         {
