@@ -79,7 +79,6 @@ static struct k_thread sa_low_prio_thread;
 static struct k_thread sa_high_prio_thread;
 static struct k_thread sb_high_prio_thread;
 static struct k_thread sb_low_prio_thread;
-static struct k_thread sb_5_thread;
 
 /* The dummy load pool is allocated unconditionally and at a fixed size so that
  * every point of the DUMMY_TASKS_COUNT sweep links to byte-identical addresses.
@@ -171,9 +170,6 @@ static void H_Task_SB(void *p1, void *p2, void *p3)
   while (1)
   {
     k_thread_suspend(k_current_get());
-#if (TEST_SB_HAS_WAITER == 0x0U)
-    k_thread_resume(&sb_low_prio_thread);
-#endif
     BMTH_mwindow_open(&scenario_b);
     BMTH_RESET_COUNTER(); /* S_B */
     BMTH_GET_START_CNT(test_start_time);
@@ -186,6 +182,9 @@ static void H_Task_SB(void *p1, void *p2, void *p3)
       __NOP();
     }
     BMTH_mwindow_close(&scenario_b);
+#if (TEST_SB_HAS_WAITER == 0x0U)
+    k_thread_resume(&sb_low_prio_thread);
+#endif
   }
 }
 
@@ -218,18 +217,6 @@ static void dummy_task(void *p1, void *p2, void *p3)
   while (1)
   {
     k_sem_take(&test_sem, K_FOREVER);
-  }
-}
-
-static void dummy_task_b(void *p1, void *p2, void *p3)
-{
-  ARG_UNUSED(p1);
-  ARG_UNUSED(p2);
-  ARG_UNUSED(p3);
-
-  while (1)
-  {
-    k_thread_suspend(k_current_get());
   }
 }
 
@@ -293,10 +280,6 @@ static void I_Task(void *p1, void *p2, void *p3)
                     dummy_task, NULL, NULL, NULL, sb_dummy_prios[i], 0,
                     K_NO_WAIT);
   }
-
-  k_thread_create(&sb_5_thread, sa_dummy_stacks[0], THREAD_STACK_SIZE,
-                  dummy_task_b, NULL, NULL, NULL, TASK_SB_DUMMY_5_PRIO, 0,
-                  K_NO_WAIT);
 
   for (uint32_t i = 0; i <= MEASUREMENT_COUNT - 1; i++)
   {
