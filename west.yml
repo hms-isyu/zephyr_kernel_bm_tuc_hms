@@ -16,7 +16,7 @@ manifest:
     - name: zephyrproject-rtos
       url-base: https://github.com/zephyrproject-rtos
     - name: benchmark_hms
-      url-base: git@ixxat-git.hms.se:masterthesis_rtos_benchmarks
+      url-base: https://github.com/hms-isyu/benchmark_test_hms.git
 
   projects:
     - name: zephyr
