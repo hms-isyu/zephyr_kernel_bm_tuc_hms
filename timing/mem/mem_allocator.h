@@ -37,12 +37,12 @@
  *   allocator    the thing under test.
  *   usable       memory occupied by application data, never a header, a
  *   memory       footer, a bucket table or any other allocator bookkeeping.
- *   usable       MEM_ARENA_SIZE. The usable memory every step allocates, the
- *   memory       same number for every allocator and every step, so a count of
- *   budget       allocations means the same thing everywhere.
- *   headroom     MEM_ARENA_HEADROOM, the factor the arena is oversized by so
+ *   usable       MEM_REQUESTED_SPACE. The usable memory every step allocates,
+ *   memory       the same number for every allocator and every step, so a
+ *   budget       count of allocations means the same thing everywhere.
+ *   headroom     MEM_ARENA_MULTIPLIER, the factor the arena is oversized by so
  *                that no step can exhaust it.
- *   arena        the storage the adapter declares, MEM_ARENA_BYTES. Created
+ *   arena        the storage the adapter declares, MEM_ARENA_SIZE. Created
  *                once per step, never sized per step, the same number of bytes
  *                for every allocator.
  *   real arena   the bytes the allocator reports it was given. A measured
@@ -72,13 +72,13 @@
  *                later allocate. A bump allocator does not reclaim, and the
  *                harness probes for that before it measures anything.
  *
- * Verbs: create, destroy, clog, allocate and free. Only these five.
+ * Verbs: create, destroy, trim, allocate and free. Only these five.
  ******************************************************************************/
 
 /*!
  * \brief Create the arena, cut at the given granularity.
  *
- * The arena is MEM_ARENA_BYTES every time, whatever the granularity: the
+ * The arena is MEM_ARENA_SIZE every time, whatever the granularity: the
  * usable memory budget times the headroom, so the storage that goes in is the
  * same number of bytes at every step of the sweep and for every allocator, and
  * the bookkeeping comes out of the headroom rather than out of the budget.
@@ -129,7 +129,7 @@ void mem_allocator_destroy_arena(void);
  * For an allocator whose arena is drawn from a larger backing store and which
  * therefore does not refuse at the arena's edge: when its arena is full it
  * takes more from the store behind it and carries on, so left alone it would
- * report the store's capacity under the arena's name. This clogs the store,
+ * report the store's capacity under the arena's name. This trims the store,
  * takes the surplus out of it and keeps it, so that the next refusal comes at
  * the arena's edge, where every other allocator's comes.
  *
@@ -143,7 +143,7 @@ void mem_allocator_destroy_arena(void);
  * Needing it is a statement about the allocator, not about the adapter, and it
  * belongs next to that allocator's numbers: its capacity is not its own.
  */
-void mem_allocator_clog(void);
+void mem_allocator_trim_store(void);
 
 /*!
  * \brief Allocate, without blocking. NULL when the allocator is full.
@@ -175,7 +175,7 @@ bool mem_allocator_create_is_native(void);
  *
  * A field read: what the allocator reports it was given, not a compile time
  * constant the adapter repeats back and not a function of the granularity. The
- * arena the adapter declares is MEM_ARENA_BYTES at every step and for every
+ * arena the adapter declares is MEM_ARENA_SIZE at every step and for every
  * allocator, so two rows of this column differ only by what the allocator
  * itself takes off the storage handed to it before it calls the rest its own.
  *
@@ -184,8 +184,8 @@ bool mem_allocator_create_is_native(void);
  *
  * The adapter reports it rather than the harness computing it because only the
  * adapter can reach the allocator's own record of its size. The harness
- * records the number, and the subtraction against MEM_ARENA_SIZE is done off
- * the target.
+ * records the number, and the subtraction against MEM_REQUESTED_SPACE is done
+ * off the target.
  *
  * Called only outside a window.
  */
@@ -197,8 +197,8 @@ size_t mem_allocator_arena_bytes(void);
  * The bytes the allocator has consumed to hold the allocations currently live,
  * as the allocator itself accounts for them: usable memory plus whatever
  * bookkeeping those allocations cost. The harness reads it after a step has
- * allocated its N(s) times, so the difference against MEM_ARENA_SIZE is the
- * per allocation overhead of the whole step.
+ * allocated its N(s) times, so the difference against MEM_REQUESTED_SPACE is
+ * the per allocation overhead of the whole step.
  *
  * The adapter reports it rather than the harness computing it because the
  * harness knows only what it asked for. What a request cost in the arena is a
@@ -227,5 +227,41 @@ size_t mem_allocator_used_bytes(void);
  * Called only outside a window.
  */
 size_t mem_allocator_fixed_bytes(void);
+
+/*!
+ * \brief Reports whether this allocator serves nothing larger than the
+ *        granularity it was cut at.
+ *
+ * True for a fixed-size allocator, one piece of one size for the whole
+ * arena, false for one that carves the arena on demand and has no
+ * granularity to be bounded by. It is the only way the harness learns that a
+ * request above the granularity is one the allocator cannot serve, so a
+ * measured wrapper never has to guard against it itself.
+ *
+ * Never measured.
+ */
+bool mem_allocator_is_fixed_size(void);
+
+/*!
+ * \brief Reports whether mem_allocator_alloc_n() is one call on this
+ *        allocator rather than a stand-in that always refuses.
+ *
+ * Never measured.
+ */
+bool mem_allocator_supports_alloc_n(void);
+
+/*!
+ * \brief Allocates count pieces in one call. Without blocking.
+ *
+ * Called only where mem_allocator_supports_alloc_n() answered true. Where it
+ * is not supported this returns false without allocating anything.
+ *
+ * @param [in]  count       How many pieces to allocate.
+ * @param [out] allocations Filled with count pointers on success, one per
+ *                          piece.
+ * @return true on success, false when the allocator refused or does not
+ *         support the call.
+ */
+bool mem_allocator_alloc_n(size_t count, void **allocations);
 
 #endif /* MEM_ALLOCATOR_H */

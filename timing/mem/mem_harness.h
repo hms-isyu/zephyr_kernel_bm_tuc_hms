@@ -31,7 +31,7 @@
  *
  *   workload  one row of the table, W1 to W7_C.
  *   step      s. The request is 2^s bytes. s runs from MEM_S_MIN to
- *             MEM_S_MAX, and MEM_ARENA_SIZE is 2^MEM_S_MAX.
+ *             MEM_S_MAX, and MEM_REQUESTED_SPACE is 2^MEM_S_MAX.
  *   run       one execution of one workload at one step. One measured
  *             operation, one sample.
  *   served    a step for which one allocate on a freshly created arena returns
@@ -46,15 +46,15 @@
  *   W1    alloc by size          s_min … s_max      request size
  *   W2    free, one neighbour    s_min … s_max      request size
  *   W3    time to fill the arena s_min … s_max      request size
- *   W4    free, no coalesce      s_min … s_max - 2  holes on the free list
- *   W5    free, both neighbours  s_min … s_max - 2  sweep index
+ *   W4    free, no coalesce      s_min … s_max      holes on the free list
+ *   W5    free, both neighbours  s_min … s_max      sweep index
  *   W6    arena creation         s_min … s_max      granularity
  *   W7_A  fit policy, order 1    one run            nothing; address recorded
  *   W7_B  fit policy, order 2    one run            address only, no cycles
  *   W7_C  next-fit probe         one run            address only, no cycles
  *
  * The W6 axis is the granularity alone. Every adapter declares an arena of
- * MEM_ARENA_BYTES, the same number of bytes at every step and for every
+ * MEM_ARENA_SIZE, the same number of bytes at every step and for every
  * allocator, so what the step hands over does not move with the step, and the
  * storage the adapters declare carries no per allocator difference. The real
  * arena at each step, as the allocator reports it, is recorded in
@@ -64,21 +64,20 @@
  ******************************************************************************/
 
 /*
- * The step range, the usable memory budget, and the arena that follows from
- * it.
+ * The step range, the requested space, and the arena that follows from it.
  *
- * MEM_ARENA_SIZE is the usable memory budget: the usable memory every step
- * allocates, 2^MEM_S_MAX, the same number for every allocator and every step.
- * Usable memory is memory occupied by application data, never a header, a
- * footer, a bucket table or any other allocator bookkeeping. MEM_ARENA_SIZE is
- * not the size of any array.
+ * MEM_REQUESTED_SPACE is the usable memory budget: the usable memory every
+ * step allocates, 2^MEM_S_MAX, the same number for every allocator and every
+ * step. Usable memory is memory occupied by application data, never a
+ * header, a footer, a bucket table or any other allocator bookkeeping.
+ * MEM_REQUESTED_SPACE is not the size of any array.
  *
- * MEM_ARENA_BYTES is the arena: the storage an adapter declares,
- * MEM_ARENA_HEADROOM times the usable memory budget. The headroom keeps the
- * bookkeeping off the budget, so no step can exhaust the arena and every step
- * allocates its full N(s) = MEM_ARENA_SIZE / 2^s times. The arena is created
- * once per step and is never sized per step, so it is the same number of bytes
- * at every step and for every allocator.
+ * MEM_ARENA_SIZE is the arena: the storage an adapter declares,
+ * MEM_ARENA_MULTIPLIER times the requested space. The headroom this leaves
+ * keeps the bookkeeping off the budget, so no step can exhaust the arena and
+ * every step allocates its full N(s) = MEM_REQUESTED_SPACE / 2^s times. The
+ * arena is created once per step and is never sized per step, so it is the
+ * same number of bytes at every step and for every allocator.
  *
  * A step stops on its count, at N(s) successful allocations, and never on a
  * NULL. A NULL from any allocation in W1 to W5 is therefore a fault of the
@@ -103,49 +102,58 @@
 #define MEM_S_MIN (3U)
 #define MEM_S_MAX (10U)
 #define MEM_S_COUNT (MEM_S_MAX - MEM_S_MIN + 1U)
-#define MEM_ARENA_SIZE (1U << MEM_S_MAX)
+#define MEM_REQUESTED_SPACE (1U << MEM_S_MAX)
 
 /* Overridable from the build, so a headroom question can be answered without
  * editing this header. */
-#ifndef MEM_ARENA_HEADROOM
-#define MEM_ARENA_HEADROOM (4U)
+#ifndef MEM_ARENA_MULTIPLIER
+#define MEM_ARENA_MULTIPLIER (4U)
 #endif
 
-#define MEM_ARENA_BYTES (MEM_ARENA_HEADROOM * MEM_ARENA_SIZE)
+#define MEM_ARENA_SIZE (MEM_ARENA_MULTIPLIER * MEM_REQUESTED_SPACE)
 
 /*
- * A headroom of 1 is the exhaustion design this arena replaces: the arena
- * would be the usable memory budget itself, every allocator's bookkeeping
- * would come out of the budget, and a step would run out before it had
- * allocated N(s) times. Two is the smallest factor that leaves the bookkeeping
+ * A multiplier of 1 is the exhaustion design this arena replaces: the arena
+ * would be the requested space itself, every allocator's bookkeeping would
+ * come out of the budget, and a step would run out before it had allocated
+ * N(s) times. Two is the smallest factor that leaves the bookkeeping
  * somewhere else to go.
  */
-_Static_assert(MEM_ARENA_HEADROOM >= 2,
-               "MEM_ARENA_HEADROOM below 2 puts allocator bookkeeping on the "
-               "usable memory budget");
+_Static_assert(MEM_ARENA_MULTIPLIER >= 2,
+               "MEM_ARENA_MULTIPLIER below 2 puts allocator bookkeeping on "
+               "the requested space");
 
 #define MEM_SIZE_OF_S(s_) ((size_t) (1U << (s_)))
 #define MEM_INDEX_OF_S(s_) ((uint32_t) ((s_) - MEM_S_MIN))
 
 /*
- * W4 and W5 stop two steps short of the top. They walk every allocation the
- * arena holds and free every second one, so what their series responds to is
- * the number of allocations rather than the request size; at 2^(MEM_S_MAX - 1)
- * the arena holds two and there is no second one to free.
+ * W4 and W5 walk every allocation held and free every second one, so what
+ * their series responds to is the number of allocations rather than the
+ * request size. Both sweep the full MEM_S_MIN to MEM_S_MAX range; at the top
+ * of it there are too few allocations for a second one to free, which
+ * mem_sweep_odd() reports as MEM_STATUS_SETUP_FAILED rather than needing a
+ * sweep bound of its own.
  */
-#define MEM_S_SWEEP_MAX (MEM_S_MAX - 2U)
-#define MEM_S_SWEEP_COUNT (MEM_S_SWEEP_MAX - MEM_S_MIN + 1U)
 
 /*
- * Upper bounds on the filling loops. The usable memory budget divided by the
- * smallest request is N(MEM_S_MIN), the most allocations any step hands out;
- * and half of those is the most holes an every-second sweep can make. Both are
- * array sizes and hard limits in the loops: the loops stop on N(s), which is
- * never above MEM_ALLOCATIONS_MAX, and the bound stays as the guard against an
- * allocator the harness would otherwise hang on.
+ * Upper bounds on the filling loops.
+ *
+ * MEM_ALLOCATIONS_MAX is the arena divided by the smallest request, the most
+ * allocations a clog of the arena can yield, and bounds mem_held[]: the
+ * harness holds every allocation of a step by index, and the arena is the
+ * largest thing any step is ever asked to fill.
+ *
+ * MEM_HOLES_MAX is the requested space divided by the smallest request,
+ * c(MEM_S_MIN), the most allocations N(s) reaches at any step and therefore
+ * the most measured frees one W4 or W5 step's every-second sweep can take. It
+ * bounds the W4 and W5 values buffers, one sample per freed index.
+ *
+ * Both are array sizes and hard limits in the loops: the loops stop on their
+ * own count, which is never above either bound, and the bound stays as the
+ * guard against an allocator the harness would otherwise hang on.
  */
 #define MEM_ALLOCATIONS_MAX (MEM_ARENA_SIZE / MEM_SIZE_OF_S(MEM_S_MIN))
-#define MEM_HOLES_MAX (MEM_ALLOCATIONS_MAX / 2U)
+#define MEM_HOLES_MAX (MEM_REQUESTED_SPACE / MEM_SIZE_OF_S(MEM_S_MIN))
 
 /*
  * Layout L, which all three W7 runs build.
@@ -334,7 +342,7 @@ typedef struct mem_results_t
 
   /*
    * The real arena in bytes at each step, as the adapter reports it after the
-   * creation that step was measured on. The same MEM_ARENA_BYTES goes in at
+   * creation that step was measured on. The same MEM_ARENA_SIZE goes in at
    * every step, so what differs between two rows here is what the allocator
    * charges for holding an arena of that size. Never a time.
    */
@@ -346,8 +354,8 @@ typedef struct mem_results_t
    * fixed arena cost is the bytes it spends on having an arena at all,
    * independent of how many allocations are live. Both as the adapter reports
    * them, both outside every window. Nothing is derived from either here: the
-   * subtractions against MEM_ARENA_SIZE and against each other are done off
-   * the target in the workbook. Never a time.
+   * subtractions against MEM_REQUESTED_SPACE and against each other are done
+   * off the target in the workbook. Never a time.
    */
   uint32_t w3_used_bytes[MEM_S_COUNT];
   uint32_t fixed_bytes[MEM_S_COUNT];
@@ -361,13 +369,13 @@ typedef struct mem_results_t
   uint32_t     w3_allocations[MEM_S_COUNT]; /* how many the arena held      */
   bool         w3_count_expected[MEM_S_COUNT]; /* w3_allocations was N(s)   */
 
-  mem_status_t w4_status[MEM_S_SWEEP_COUNT];
-  uint32_t     w4_allocations[MEM_S_SWEEP_COUNT];
-  uint32_t     w4_holes[MEM_S_SWEEP_COUNT]; /* samples in values_buffer     */
+  mem_status_t w4_status[MEM_S_COUNT];
+  uint32_t     w4_allocations[MEM_S_COUNT];
+  uint32_t     w4_holes[MEM_S_COUNT]; /* samples in values_buffer            */
 
-  mem_status_t w5_status[MEM_S_SWEEP_COUNT];
-  uint32_t     w5_allocations[MEM_S_SWEEP_COUNT];
-  uint32_t     w5_holes[MEM_S_SWEEP_COUNT];
+  mem_status_t w5_status[MEM_S_COUNT];
+  uint32_t     w5_allocations[MEM_S_COUNT];
+  uint32_t     w5_holes[MEM_S_COUNT];
 
   mem_status_t w6_status[MEM_S_COUNT];
   bool         w6_native; /* false: the adapter stood in for the allocator  */
@@ -386,8 +394,8 @@ extern mem_results_t mem_results;
 extern BMTH_measurement_series_t mem_w1_alloc[MEM_S_COUNT];
 extern BMTH_measurement_series_t mem_w2_free[MEM_S_COUNT];
 extern BMTH_measurement_series_t mem_w3_fill[MEM_S_COUNT];
-extern BMTH_measurement_series_t mem_w4_free[MEM_S_SWEEP_COUNT];
-extern BMTH_measurement_series_t mem_w5_free[MEM_S_SWEEP_COUNT];
+extern BMTH_measurement_series_t mem_w4_free[MEM_S_COUNT];
+extern BMTH_measurement_series_t mem_w5_free[MEM_S_COUNT];
 extern BMTH_measurement_series_t mem_w6_create[MEM_S_COUNT];
 extern BMTH_measurement_series_t mem_w7a_alloc;
 

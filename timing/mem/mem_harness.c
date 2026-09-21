@@ -71,16 +71,16 @@ mem_results_t mem_results;
 BMTH_measurement_series_t mem_w1_alloc[MEM_S_COUNT];
 BMTH_measurement_series_t mem_w2_free[MEM_S_COUNT];
 BMTH_measurement_series_t mem_w3_fill[MEM_S_COUNT];
-BMTH_measurement_series_t mem_w4_free[MEM_S_SWEEP_COUNT];
-BMTH_measurement_series_t mem_w5_free[MEM_S_SWEEP_COUNT];
+BMTH_measurement_series_t mem_w4_free[MEM_S_COUNT];
+BMTH_measurement_series_t mem_w5_free[MEM_S_COUNT];
 BMTH_measurement_series_t mem_w6_create[MEM_S_COUNT];
 BMTH_measurement_series_t mem_w7a_alloc;
 
 /* W4 and W5 take one sample per freed index, so their series need somewhere to
  * put the whole sweep. Every other workload takes one sample per run and reads
  * out of last_value. */
-static uint32_t mem_w4_buffer[MEM_S_SWEEP_COUNT][MEM_HOLES_MAX];
-static uint32_t mem_w5_buffer[MEM_S_SWEEP_COUNT][MEM_HOLES_MAX];
+static uint32_t mem_w4_buffer[MEM_S_COUNT][MEM_HOLES_MAX];
+static uint32_t mem_w5_buffer[MEM_S_COUNT][MEM_HOLES_MAX];
 
 /* Written by the measured call, and file scope, so the window carries the
  * INSIDE_FUNCTION_FILE_SCOPE_VARS artefact the series is initialized with and
@@ -149,7 +149,7 @@ static const uint8_t mem_w7_free_order[MEM_W7_RUN_COUNT][MEM_W7_GAP_COUNT] = {
  * Prototypes
  ******************************************************************************/
 
-__attribute__((weak)) void mem_allocator_clog(void)
+__attribute__((weak)) void mem_allocator_trim_store(void)
 {
   return;
 }
@@ -170,20 +170,21 @@ static bool mem_has(uint32_t capability)
  * the arena again, which is why every caller is gated on
  * MEM_CAPABILITY_CREATE.
  *
- * The loop stops on its count, at N(s) = MEM_ARENA_SIZE / bytes successful
- * allocations, and does not call allocate again: the arena is oversized by
- * MEM_ARENA_HEADROOM, so what ends a fill is the usable memory budget being
- * spent and not the allocator refusing. One division per fill, before the
- * loop, the same fixed cost at every step and for every allocator.
+ * The loop stops on its count, at N(s) = MEM_REQUESTED_SPACE / bytes
+ * successful allocations, and does not call allocate again: the arena is
+ * oversized by MEM_ARENA_MULTIPLIER, so what ends a fill is the usable memory
+ * budget being spent and not the allocator refusing. One division per fill,
+ * before the loop, the same fixed cost at every step and for every allocator.
  *
  * The NULL compare is the fail case: a step that stops short of N(s) met a
  * refusal it was not supposed to meet, and the caller reads that off the
- * count. MEM_ALLOCATIONS_MAX is N(MEM_S_MIN), so the count can never reach it
- * from above and mem_fill_bounded stays the guard on the array bound.
+ * count. MEM_ALLOCATIONS_MAX is the arena's count at the smallest request,
+ * above N(MEM_S_MIN), so the count can never reach it from above and
+ * mem_fill_bounded stays the guard on the array bound.
  */
 static void mem_fill_blind(size_t bytes)
 {
-  const uint32_t limit = (uint32_t) (MEM_ARENA_SIZE / bytes);
+  const uint32_t limit = (uint32_t) (MEM_REQUESTED_SPACE / bytes);
   uint32_t       n     = 0U;
 
   while ((n < limit) && (mem_allocator_alloc(bytes) != NULL))
@@ -204,9 +205,9 @@ static void mem_fill_blind(size_t bytes)
  * below N(s), which is what the caller checks; the return value stays what it
  * was, false only when the allocator handed out more than the array can hold.
  */
-static bool mem_fill_held(size_t bytes)
+static bool mem_clog(size_t bytes)
 {
-  const uint32_t limit = (uint32_t) (MEM_ARENA_SIZE / bytes);
+  const uint32_t limit = (uint32_t) (MEM_REQUESTED_SPACE / bytes);
   void          *allocation;
 
   mem_held_count = 0U;
@@ -286,9 +287,9 @@ static void mem_probe_capabilities(void)
 
   mem_allocator_destroy_arena();
   mem_allocator_create_arena(bytes);
-  mem_allocator_clog();
+  mem_allocator_trim_store();
 
-  if (!mem_fill_held(bytes))
+  if (!mem_clog(bytes))
   {
     mem_results.failures |= MEM_FAILURE_UNBOUNDED;
     return;
@@ -306,7 +307,7 @@ static void mem_probe_capabilities(void)
 
   mem_probe_serves = true;
 
-  if (!mem_fill_held(bytes))
+  if (!mem_clog(bytes))
   {
     mem_results.failures |= MEM_FAILURE_UNBOUNDED;
     return;
@@ -316,14 +317,14 @@ static void mem_probe_capabilities(void)
   mem_free_held();
 
   /* Fill it and walk away from it: creating the arena is the only way back. */
-  (void) mem_fill_held(bytes);
+  (void) mem_clog(bytes);
   mem_held_count = 0U;
 
   mem_allocator_destroy_arena();
   mem_allocator_create_arena(bytes);
-  mem_allocator_clog();
+  mem_allocator_trim_store();
 
-  if (!mem_fill_held(bytes))
+  if (!mem_clog(bytes))
   {
     mem_results.failures |= MEM_FAILURE_UNBOUNDED;
     return;
@@ -333,7 +334,7 @@ static void mem_probe_capabilities(void)
   mem_free_held();
   mem_allocator_destroy_arena();
   mem_allocator_create_arena(bytes);
-  mem_allocator_clog();
+  mem_allocator_trim_store();
 
   if (after_free == baseline)
   {
@@ -352,7 +353,7 @@ static void mem_probe_capabilities(void)
  * is and therefore the floor the other allocation workloads are read against.
  *
  * Every step is run. On the headroom arena no step is expected to be refused:
- * one allocation of 2^MEM_S_MAX out of MEM_ARENA_BYTES leaves the headroom
+ * one allocation of 2^MEM_S_MAX out of MEM_ARENA_SIZE leaves the headroom
  * untouched. A refusal here is therefore a fault of the harness setup, marked
  * through MEM_FAILURE_ARENA_SIZE, and w1_served still says which steps it was.
  */
@@ -367,7 +368,7 @@ static void mem_run_w1(void)
 
     mem_allocator_destroy_arena();
     mem_allocator_create_arena(bytes);
-    mem_allocator_clog();
+    mem_allocator_trim_store();
 
     MEM_MEASURE(&mem_w1_alloc[i], mem_allocation = mem_allocator_alloc(bytes));
 
@@ -389,7 +390,7 @@ static void mem_run_w1(void)
 
   mem_allocator_destroy_arena();
   mem_allocator_create_arena(MEM_SIZE_OF_S(MEM_S_MIN));
-  mem_allocator_clog();
+  mem_allocator_trim_store();
 }
 
 /*
@@ -415,7 +416,7 @@ static void mem_run_w2(void)
 
     mem_allocator_destroy_arena();
     mem_allocator_create_arena(bytes);
-    mem_allocator_clog();
+    mem_allocator_trim_store();
     mem_allocation = mem_allocator_alloc(bytes);
 
     if (mem_allocation == NULL)
@@ -433,7 +434,7 @@ static void mem_run_w2(void)
 
   mem_allocator_destroy_arena();
   mem_allocator_create_arena(MEM_SIZE_OF_S(MEM_S_MIN));
-  mem_allocator_clog();
+  mem_allocator_trim_store();
 }
 
 /*
@@ -461,7 +462,7 @@ static void mem_run_w2(void)
  * to stay the one call, so nothing is read around it. All three byte figures
  * are read outside the window, two of them after it closes.
  *
- * The check is against N(s) = MEM_ARENA_SIZE / 2^s, the allocations a step
+ * The check is against N(s) = MEM_REQUESTED_SPACE / 2^s, the allocations a step
  * makes, and it applies to every adapter. N(s) is the invariant of the whole
  * directory; the fill loop now bounds itself by it, so what the check reads is
  * whether the loop ran to the end, and a count below it means an allocation
@@ -481,7 +482,7 @@ static void mem_run_w3(void)
 
     mem_allocator_destroy_arena();
     mem_allocator_create_arena(bytes);
-    mem_allocator_clog();
+    mem_allocator_trim_store();
 
     /* What the allocator reports it was given for this step, read once, before
      * the window opens. The subtraction against MEM_ARENA_SIZE is done off the
@@ -522,7 +523,7 @@ static void mem_run_w3(void)
 
     mem_allocator_destroy_arena();
     mem_allocator_create_arena(bytes);
-    mem_allocator_clog();
+    mem_allocator_trim_store();
   }
 
   /* The total used space column is readable only if the adapter answered at
@@ -540,7 +541,7 @@ static void mem_run_w3(void)
 
   mem_allocator_destroy_arena();
   mem_allocator_create_arena(MEM_SIZE_OF_S(MEM_S_MIN));
-  mem_allocator_clog();
+  mem_allocator_trim_store();
 }
 
 /*
@@ -587,22 +588,22 @@ static bool mem_sweep_odd(BMTH_measurement_series_t *mseries)
  */
 static void mem_run_w4(void)
 {
-  for (uint32_t s = MEM_S_MIN; s <= MEM_S_SWEEP_MAX; s++)
+  for (uint32_t s = MEM_S_MIN; s <= MEM_S_MAX; s++)
   {
     const uint32_t j     = MEM_INDEX_OF_S(s);
     const size_t   bytes = MEM_SIZE_OF_S(s);
 
     mem_allocator_destroy_arena();
     mem_allocator_create_arena(bytes);
-    mem_allocator_clog();
+    mem_allocator_trim_store();
 
-    if (!mem_fill_held(bytes))
+    if (!mem_clog(bytes))
     {
       mem_results.w4_status[j] = MEM_STATUS_UNBOUNDED;
       mem_results.failures |= MEM_FAILURE_UNBOUNDED;
       mem_allocator_destroy_arena();
       mem_allocator_create_arena(bytes);
-      mem_allocator_clog();
+      mem_allocator_trim_store();
       continue;
     }
 
@@ -676,12 +677,12 @@ static void mem_run_w4(void)
     mem_free_held();
     mem_allocator_destroy_arena();
     mem_allocator_create_arena(bytes);
-    mem_allocator_clog();
+    mem_allocator_trim_store();
   }
 
   mem_allocator_destroy_arena();
   mem_allocator_create_arena(MEM_SIZE_OF_S(MEM_S_MIN));
-  mem_allocator_clog();
+  mem_allocator_trim_store();
 }
 
 /*
@@ -696,22 +697,22 @@ static void mem_run_w4(void)
  */
 static void mem_run_w5(void)
 {
-  for (uint32_t s = MEM_S_MIN; s <= MEM_S_SWEEP_MAX; s++)
+  for (uint32_t s = MEM_S_MIN; s <= MEM_S_MAX; s++)
   {
     const uint32_t j     = MEM_INDEX_OF_S(s);
     const size_t   bytes = MEM_SIZE_OF_S(s);
 
     mem_allocator_destroy_arena();
     mem_allocator_create_arena(bytes);
-    mem_allocator_clog();
+    mem_allocator_trim_store();
 
-    if (!mem_fill_held(bytes))
+    if (!mem_clog(bytes))
     {
       mem_results.w5_status[j] = MEM_STATUS_UNBOUNDED;
       mem_results.failures |= MEM_FAILURE_UNBOUNDED;
       mem_allocator_destroy_arena();
       mem_allocator_create_arena(bytes);
-      mem_allocator_clog();
+      mem_allocator_trim_store();
       continue;
     }
 
@@ -747,12 +748,12 @@ static void mem_run_w5(void)
     mem_free_held();
     mem_allocator_destroy_arena();
     mem_allocator_create_arena(bytes);
-    mem_allocator_clog();
+    mem_allocator_trim_store();
   }
 
   mem_allocator_destroy_arena();
   mem_allocator_create_arena(MEM_SIZE_OF_S(MEM_S_MIN));
-  mem_allocator_clog();
+  mem_allocator_trim_store();
 }
 
 /*
@@ -790,14 +791,14 @@ static void mem_run_w6(void)
 
     /* Outside the window: the creation is the measurement, and clogging the
      * store behind it is not part of it. */
-    mem_allocator_clog();
+    mem_allocator_trim_store();
 
     mem_results.w6_status[i] = MEM_STATUS_OK;
   }
 
   mem_allocator_destroy_arena();
   mem_allocator_create_arena(MEM_SIZE_OF_S(MEM_S_MIN));
-  mem_allocator_clog();
+  mem_allocator_trim_store();
 }
 
 /* Which of the five gaps an address is, or OTHER, or NULL. */
@@ -849,7 +850,7 @@ static bool mem_w7_build(mem_w7_run_t run, void **chunk)
    * under which the layout has any chance of being built at all. */
   mem_allocator_destroy_arena();
   mem_allocator_create_arena(MEM_W7_SEPARATOR);
-  mem_allocator_clog();
+  mem_allocator_trim_store();
 
   for (uint32_t i = 0U; i < MEM_COUNT_OF(mem_w7_layout); i++)
   {
@@ -927,7 +928,7 @@ static void mem_run_w7(mem_w7_run_t run)
     mem_results.w7[run].status = MEM_STATUS_SETUP_FAILED;
     mem_allocator_destroy_arena();
     mem_allocator_create_arena(MEM_SIZE_OF_S(MEM_S_MIN));
-    mem_allocator_clog();
+    mem_allocator_trim_store();
     return;
   }
 
@@ -976,7 +977,7 @@ static void mem_run_w7(mem_w7_run_t run)
 
   mem_allocator_destroy_arena();
   mem_allocator_create_arena(MEM_SIZE_OF_S(MEM_S_MIN));
-  mem_allocator_clog();
+  mem_allocator_trim_store();
 }
 
 /*
@@ -1191,5 +1192,5 @@ void mem_harness_init(void)
 
   mem_allocator_destroy_arena();
   mem_allocator_create_arena(MEM_SIZE_OF_S(MEM_S_MIN));
-  mem_allocator_clog();
+  mem_allocator_trim_store();
 }
