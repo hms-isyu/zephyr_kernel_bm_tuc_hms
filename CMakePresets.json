@@ -1,0 +1,57 @@
+{
+  "version": 7,
+  "cmakeMinimumRequired": {
+    "major": 3
+  },
+  "configurePresets": [
+    {
+      "name": "build",
+      "displayName": "build",
+      "generator": "Ninja",
+      "binaryDir": "${fileDir}/${presetName}",
+      "cacheVariables": {
+        "APP_DIR": {
+          "value": "${fileDir}",
+          "type": "PATH"
+        },
+        "BOARD": "frdm_mcxn947/mcxn947/cpu0",
+        "CMAKE_BUILD_TYPE": "build",
+        "ZEPHYR_TOOLCHAIN_VARIANT": "gnuarmemb",
+        "GNUARMEMB_TOOLCHAIN_PATH": {
+          "value": "C:/Users/isyu/Work/ThirdParty/mcuxpressotools/.mcuxpressotools/arm-gnu-toolchain-14.2.rel1-mingw-w64-x86_64-arm-none-eabi",
+          "type": "PATH"
+        },
+        "ZEPHYR_BASE": "c:/Users/isyu/Work/Projects/benchmarks/zephyr-ws/zephyr",
+        "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "$env{binaryDir}",
+        "CMAKE_LIBRARY_OUTPUT_DIRECTORY": "$env{binaryDir}",
+        "CMAKE_ARCHIVE_OUTPUT_DIRECTORY": "$env{binaryDir}",
+        "EXTRA_DTC_OVERLAY_FILE": "${sourceDir}/app.overlay"
+      },
+      "inherits": [
+        "build-env"
+      ],
+      "toolchainFile": ""
+    },
+    {
+      "name": "CMakePresets.json",
+      "displayName": "Custom configure preset",
+      "description": "Sets Ninja generator, build and install directory",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "build",
+      "displayName": "build",
+      "configurePreset": "build"
+    }
+  ],
+  "include": [
+    "mcux_include.json"
+  ]
+}

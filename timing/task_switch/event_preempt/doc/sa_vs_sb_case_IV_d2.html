@@ -1,0 +1,689 @@
+<title>event_preempt — TEST_CASE_IV, 2 dummy threads — S_A vs S_B</title>
+<style>
+:root{
+  --bg:#ffffff; --fg:#1b1f24; --muted:#6a737d; --line:#d8dee4; --head:#f2f4f7;
+  --code:#24292f; --alias:#8250df; --addr:#57606a;
+  --win:#fff6d5; --mark:#c25e00; --markbg:#fff1e3;
+  --isr:#0a5ca8; --isrbg:#e4f0fb; --fold:#f6f8fa;
+  --scan:#0a66c2; --scantint:rgba(10,102,194,.13);
+  --tins:#1a7f37; --tinstint:rgba(26,127,55,.13);
+  --tapp:#8a6d00; --tapptint:rgba(138,109,0,.14);
+  --df:#b3560a; --dftint:rgba(179,86,10,.10);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; --head:#161b22;
+  --code:#e6edf3; --alias:#d2a8ff; --addr:#8b949e;
+  --win:#3a3213; --mark:#ff9d4d; --markbg:#3d2410;
+  --isr:#79c0ff; --isrbg:#12283f; --fold:#161b22;
+  --scan:#58a6ff; --scantint:rgba(88,166,255,.16);
+  --tins:#3fb950; --tinstint:rgba(63,185,80,.16);
+  --tapp:#d9b400; --tapptint:rgba(217,180,0,.16);
+  --df:#ffa657; --dftint:rgba(255,166,87,.13);}}
+:root[data-theme="dark"]{
+  --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; --head:#161b22;
+  --code:#e6edf3; --alias:#d2a8ff; --addr:#8b949e;
+  --win:#3a3213; --mark:#ff9d4d; --markbg:#3d2410;
+  --isr:#79c0ff; --isrbg:#12283f; --fold:#161b22;
+  --scan:#58a6ff; --scantint:rgba(88,166,255,.16);
+  --tins:#3fb950; --tinstint:rgba(63,185,80,.16);
+  --tapp:#d9b400; --tapptint:rgba(217,180,0,.16);
+  --df:#ffa657; --dftint:rgba(255,166,87,.13);}
+body{background:var(--bg);color:var(--fg);margin:0;padding:2rem 1.25rem 4rem;
+  font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;}
+main{max-width:1220px;margin:0 auto;}
+h1{font-size:1.4rem;margin:0 0 .3rem;letter-spacing:-.01em;}
+h2{font-size:1.05rem;margin:2.6rem 0 .3rem;letter-spacing:-.01em;}
+.lead{color:var(--muted);margin:0 0 1.2rem;font-size:.92rem;}
+.sub{color:var(--muted);margin:0 0 .8rem;font-size:.88rem;}
+.legend{display:flex;flex-wrap:wrap;gap:.5rem 1.1rem;margin:0 0 1.4rem;font-size:.82rem;color:var(--muted);}
+.legend span{display:inline-flex;align-items:center;gap:.4rem;}
+.sw{width:.85rem;height:.85rem;border-radius:3px;border:1px solid var(--line);display:inline-block;}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:8px;}
+table{border-collapse:collapse;width:100%;font-size:12.5px;}
+th{background:var(--head);text-align:left;padding:.5rem .7rem;font-weight:600;
+  border-bottom:1px solid var(--line);white-space:nowrap;}
+td{padding:.22rem .7rem;border-bottom:1px solid var(--line);vertical-align:top;}
+td.c{font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+  white-space:pre;color:var(--code);}
+td.win{background:var(--win);}
+td.rn{color:var(--addr);text-align:right;padding:.22rem .55rem;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;
+  font-variant-numeric:tabular-nums;user-select:none;white-space:nowrap;}
+th.rn{text-align:right;}
+tr.fold td{background:var(--fold);font-size:11.5px;color:var(--muted);padding:.4rem .7rem;
+  border-top:1px solid var(--line);}
+tr.fold b{color:var(--fg);font-weight:600;}
+tr.fold .n{font-family:ui-monospace,Consolas,monospace;color:var(--fg);font-weight:600;}
+tr.sec td{background:var(--fold);font-size:11px;padding:.3rem .7rem;color:var(--muted);}
+td.scan{background-image:linear-gradient(var(--scantint),var(--scantint));box-shadow:inset 3px 0 0 var(--scan);}
+td.tins{background-image:linear-gradient(var(--tinstint),var(--tinstint));box-shadow:inset 3px 0 0 var(--tins);}
+td.tapp{background-image:linear-gradient(var(--tapptint),var(--tapptint));box-shadow:inset 3px 0 0 var(--tapp);}
+tr.diff td.rn{color:var(--df);font-weight:700;}
+tr.diff td.c{background-image:linear-gradient(var(--dftint),var(--dftint));}
+.badge{display:inline-block;border:1.5px solid var(--mark);color:var(--mark);border-radius:3px;
+  padding:0 .35rem;margin-right:.5rem;font-size:10px;font-weight:800;letter-spacing:.06em;vertical-align:1px;}
+.badge.isr{border-color:var(--isr);color:var(--isr);}
+.alias{color:var(--alias);} .addr{color:var(--addr);}
+table.desc{border-collapse:collapse;width:100%;font-size:12px;margin:.2rem 0 1.2rem;}
+table.desc caption{caption-side:top;text-align:left;font-size:.8rem;font-weight:600;color:var(--fg);
+  padding:0 0 .35rem;letter-spacing:.01em;}
+table.desc thead th{background:var(--head);font-size:11.5px;padding:.35rem .6rem;
+  border-bottom:1px solid var(--line);vertical-align:bottom;}
+table.desc th.rl{width:15rem;text-align:left;vertical-align:top;background:transparent;font-weight:600;
+  color:var(--fg);white-space:normal;padding:.3rem .6rem;border-bottom:1px solid var(--line);}
+table.desc td{vertical-align:top;color:var(--muted);padding:.3rem .6rem;border-bottom:1px solid var(--line);}
+.prov{margin-top:2.8rem;font-size:.82rem;color:var(--muted);border-top:1px solid var(--line);padding-top:.9rem;}
+.prov h3{font-size:.9rem;color:var(--fg);margin:0 0 .5rem;}
+.prov dt{font-weight:600;color:var(--fg);margin-top:.5rem;}
+.prov dd{margin:.1rem 0 0 0;}
+code{font-family:ui-monospace,Consolas,monospace;font-size:.9em;}
+
+tr.ctx td{background:var(--fold);font-size:11px;color:var(--muted);padding:.28rem .7rem;}
+tr.ref td{background:var(--fold);font-size:11.5px;color:var(--muted);padding:.4rem .7rem;
+  border-top:1px solid var(--line);}
+tr.ref b{color:var(--fg);}
+tr.ref .n{font-family:ui-monospace,Consolas,monospace;color:var(--fg);font-weight:600;}
+td.nosim{border-right:2px dashed var(--mark);}
+</style>
+<main><h1>event_preempt — TEST_CASE_IV, 2 dummy threads — S_A vs S_B</h1>
+<p class="lead">The measured window of both scenarios in execution order for TEST_CASE_IV with 2 dummy threads. Only the run-queue insertion is listed instruction by instruction; every other stretch is listed once and referenced where it repeats. Fold counts differing by three instructions differ by the <code>sys_dlist_peek_next</code> look-ahead on the last waiter.</p>
+<div class="legend"><span><i class="sw" style="background:var(--win)"></i>measurement window</span><span><span class="badge">START</span><span class="badge">STOP</span>counter capture</span><span><span class="badge isr">PendSV</span>the thread leaves and regains the CPU here</span><span><i class="sw" style="background:var(--scantint);border-left:3px solid var(--scan)"></i>scan pass &mdash; steps over one run-queue entry (17)</span><span><i class="sw" style="background:var(--tinstint);border-left:3px solid var(--tins)"></i>terminal pass &mdash; insert before (8 + 6)</span><span><i class="sw" style="background:var(--fold)"></i>a block listed above, running again</span></div>
+<table class="desc"><caption>Test case and preconditions</caption><thead><tr><th></th><th>S_A</th><th>S_B</th></tr></thead><tbody>
+<tr><th class="rl">Posting thread</th><td><code>L_Task_SA(7)</code></td><td><code>H_Task_SB(9)</code></td></tr>
+<tr><th class="rl">Matching waiters on the queue</th><td><code>[H_Task_SA(2), dummy(3), dummy(4)]</code></td><td><code>[dummy(10), dummy(11)]</code></td></tr>
+<tr><th class="rl">Run queue before the post</th><td><code>[L_Task_SA(7), idle(15)]</code></td><td><code>[H_Task_SB(9), idle(15)]</code></td></tr>
+<tr><th class="rl">Wakes (walk passes)</th><td>3</td><td>2</td></tr>
+<tr><th class="rl">Scan passes per wake</th><td>1, 2, 3</td><td>2, 3</td></tr>
+<tr><th class="rl">Insertion cost per wake</th><td>wake 1: insert(8); wake 2: scan(17) + insert(8); wake 3: scan(17) + scan(17) + insert(8)</td><td>wake 1: scan(17) + insert(8); wake 2: scan(17) + scan(17) + insert(8)</td></tr>
+<tr><th class="rl">Scan passes, total</th><td>3</td><td>3</td></tr>
+<tr><th class="rl">Instructions spent in the insertion</th><td>75</td><td>67</td></tr>
+<tr><th class="rl">Instructions executed in the window</th><td>478</td><td>351</td></tr>
+<tr><th class="rl">S_B &minus; S_A</th><td colspan="2"><b>0 scan passes</b> &nbsp;&rarr;&nbsp; <b>-8 instructions</b> in the insertion &nbsp;&rarr;&nbsp; -127 over the whole window</td></tr>
+<tr><th class="rl">Configuration</th><td colspan="2"><code>TASK_SA_LOW_PRIO = 7</code>, <code>TASK_SA_HIGH_PRIO = 2</code>, <code>TASK_SB_HIGH_PRIO = 9</code>, <code>TASK_SB_LOW_PRIO = 14</code>, <code>TEST_SB_HAS_WAITER = 0</code>, <code>ADD_DUMMY_TASKS = 1</code>, <code>DUMMY_TASKS_COUNT = 2</code>.</td></tr>
+</tbody></table>
+<div class="scroll"><table><thead><tr><th class="rn">#</th><th>S_A — L_Task_SA(7) posts, H_Task_SA(2) stops the counter</th><th>S_B — H_Task_SB(9) posts and stops its own counter</th></tr></thead><tbody>
+<tr class="ctx"><td colspan="3">L_Task_SA &nbsp;|&nbsp; H_Task_SB</td></tr>
+<tr class="diff"><td class="rn">1</td><td class="c"><span class="alias">L_Task_SA</span> <span class="addr">30001228</span>  ldr r3, [pc, #44]</td><td class="c"><span class="alias">H_Task_SB</span> <span class="addr">300011be</span>  ldr r4, [pc, #60]</td></tr>
+<tr class="diff"><td class="rn">2</td><td class="c"><span class="alias">L_Task_SA</span> <span class="addr">3000122a</span>  movs r2, #0</td><td class="c"><span class="alias">H_Task_SB</span> <span class="addr">300011c0</span>  movs r3, #0</td></tr>
+<tr class="diff"><td class="rn">3</td><td class="c"><span class="alias">L_Task_SA</span> <span class="addr">3000122c</span>  str r2, [r3, #4]</td><td class="c"><span class="alias">H_Task_SB</span> <span class="addr">300011c2</span>  str r3, [r4, #4]</td></tr>
+<tr class="diff"><td class="rn">4</td><td class="c"><span class="alias">L_Task_SA</span> <span class="addr">3000122e</span>  dsb sy</td><td class="c"><span class="alias">H_Task_SB</span> <span class="addr">300011c4</span>  dsb sy</td></tr>
+<tr class="diff"><td class="rn">5</td><td class="c"><span class="alias">L_Task_SA</span> <span class="addr">30001232</span>  isb sy</td><td class="c"><span class="alias">H_Task_SB</span> <span class="addr">300011c8</span>  isb sy</td></tr>
+<tr class="diff"><td class="rn">6</td><td class="c win"><span class="badge">START</span><span class="alias">L_Task_SA</span> <span class="addr">30001236</span>  ldr r2, [r3, #4]</td><td class="c win"><span class="badge">START</span><span class="alias">H_Task_SB</span> <span class="addr">300011cc</span>  ldr r3, [r4, #4]</td></tr>
+<tr class="diff"><td class="rn">7</td><td class="c win"><span class="alias">L_Task_SA</span> <span class="addr">30001238</span>  ldr r3, [pc, #32]</td><td class="c win"><span class="alias">H_Task_SB</span> <span class="addr">300011ce</span>  ldr r6, [pc, #48]</td></tr>
+<tr class="diff"><td class="rn">8</td><td class="c win"><span class="alias">L_Task_SA</span> <span class="addr">3000123a</span>  str r2, [r3, #0]</td><td class="c win"><span class="alias">H_Task_SB</span> <span class="addr">300011d0</span>  str r3, [r6, #0]</td></tr>
+<tr class="diff"><td class="rn">9</td><td class="c win"><span class="alias">L_Task_SA</span> <span class="addr">3000123c</span>  movs r1, #1</td><td class="c win"><span class="alias">H_Task_SB</span> <span class="addr">300011d2</span>  movs r1, #2</td></tr>
+<tr class="diff"><td class="rn">10</td><td class="c win"><span class="alias">L_Task_SA</span> <span class="addr">3000123e</span>  ldr r0, [pc, #16]</td><td class="c win"><span class="alias">H_Task_SB</span> <span class="addr">300011d4</span>  ldr r0, [pc, #28]</td></tr>
+<tr class="diff"><td class="rn">11</td><td class="c win"><span class="alias">L_Task_SA</span> <span class="addr">30001240</span>  bl 30006182</td><td class="c win"><span class="alias">H_Task_SB</span> <span class="addr">300011d6</span>  bl 30006182</td></tr>
+<tr class="ctx"><td colspan="3">z_impl_k_event_post</td></tr>
+<tr><td class="rn">12</td><td class="c win"><span class="alias">k_post</span> <span class="addr">30006182</span>  push {r3, lr}</td><td class="c win"><span class="alias">k_post</span> <span class="addr">30006182</span>  push {r3, lr}</td></tr>
+<tr><td class="rn">13</td><td class="c win"><span class="alias">k_post</span> <span class="addr">30006184</span>  mov r2, r1</td><td class="c win"><span class="alias">k_post</span> <span class="addr">30006184</span>  mov r2, r1</td></tr>
+<tr><td class="rn">14</td><td class="c win"><span class="alias">k_post</span> <span class="addr">30006186</span>  bl 30004868</td><td class="c win"><span class="alias">k_post</span> <span class="addr">30006186</span>  bl 30004868</td></tr>
+<tr class="ctx"><td colspan="3">k_event_post_internal</td></tr>
+<tr><td class="rn">15</td><td class="c win"><span class="alias">post</span> <span class="addr">30004868</span>  push {r4, r5, r6, lr}</td><td class="c win"><span class="alias">post</span> <span class="addr">30004868</span>  push {r4, r5, r6, lr}</td></tr>
+<tr><td class="rn">16</td><td class="c win"><span class="alias">post</span> <span class="addr">3000486a</span>  sub sp, #8</td><td class="c win"><span class="alias">post</span> <span class="addr">3000486a</span>  sub sp, #8</td></tr>
+<tr><td class="rn">17</td><td class="c win"><span class="alias">post</span> <span class="addr">3000486c</span>  mov r4, r0</td><td class="c win"><span class="alias">post</span> <span class="addr">3000486c</span>  mov r4, r0</td></tr>
+<tr><td class="rn">18</td><td class="c win"><span class="alias">post</span> <span class="addr">3000486e</span>  mrs r6, BASEPRI</td><td class="c win"><span class="alias">post</span> <span class="addr">3000486e</span>  mrs r6, BASEPRI</td></tr>
+<tr><td class="rn">19</td><td class="c win"><span class="alias">post</span> <span class="addr">30004872</span>  movs r3, #32</td><td class="c win"><span class="alias">post</span> <span class="addr">30004872</span>  movs r3, #32</td></tr>
+<tr><td class="rn">20</td><td class="c win"><span class="alias">post</span> <span class="addr">30004874</span>  msr BASEPRI_MAX, r3</td><td class="c win"><span class="alias">post</span> <span class="addr">30004874</span>  msr BASEPRI_MAX, r3</td></tr>
+<tr><td class="rn">21</td><td class="c win"><span class="alias">post</span> <span class="addr">30004878</span>  isb sy</td><td class="c win"><span class="alias">post</span> <span class="addr">30004878</span>  isb sy</td></tr>
+<tr><td class="rn">22</td><td class="c win"><span class="alias">post</span> <span class="addr">3000487c</span>  ldr r3, [r0, #8]</td><td class="c win"><span class="alias">post</span> <span class="addr">3000487c</span>  ldr r3, [r0, #8]</td></tr>
+<tr><td class="rn">23</td><td class="c win"><span class="alias">post</span> <span class="addr">3000487e</span>  and.w r5, r3, r2</td><td class="c win"><span class="alias">post</span> <span class="addr">3000487e</span>  and.w r5, r3, r2</td></tr>
+<tr><td class="rn">24</td><td class="c win"><span class="alias">post</span> <span class="addr">30004882</span>  eors r1, r3</td><td class="c win"><span class="alias">post</span> <span class="addr">30004882</span>  eors r1, r3</td></tr>
+<tr><td class="rn">25</td><td class="c win"><span class="alias">post</span> <span class="addr">30004884</span>  ands r2, r1</td><td class="c win"><span class="alias">post</span> <span class="addr">30004884</span>  ands r2, r1</td></tr>
+<tr><td class="rn">26</td><td class="c win"><span class="alias">post</span> <span class="addr">30004886</span>  eors r3, r2</td><td class="c win"><span class="alias">post</span> <span class="addr">30004886</span>  eors r3, r2</td></tr>
+<tr><td class="rn">27</td><td class="c win"><span class="alias">post</span> <span class="addr">30004888</span>  str r3, [sp, #0]</td><td class="c win"><span class="alias">post</span> <span class="addr">30004888</span>  str r3, [sp, #0]</td></tr>
+<tr><td class="rn">28</td><td class="c win"><span class="alias">post</span> <span class="addr">3000488a</span>  movs r2, #0</td><td class="c win"><span class="alias">post</span> <span class="addr">3000488a</span>  movs r2, #0</td></tr>
+<tr><td class="rn">29</td><td class="c win"><span class="alias">post</span> <span class="addr">3000488c</span>  str r2, [sp, #4]</td><td class="c win"><span class="alias">post</span> <span class="addr">3000488c</span>  str r2, [sp, #4]</td></tr>
+<tr><td class="rn">30</td><td class="c win"><span class="alias">post</span> <span class="addr">3000488e</span>  mov r3, sp</td><td class="c win"><span class="alias">post</span> <span class="addr">3000488e</span>  mov r3, sp</td></tr>
+<tr><td class="rn">31</td><td class="c win"><span class="alias">post</span> <span class="addr">30004890</span>  ldr r1, [pc, #28]</td><td class="c win"><span class="alias">post</span> <span class="addr">30004890</span>  ldr r1, [pc, #28]</td></tr>
+<tr><td class="rn">32</td><td class="c win"><span class="alias">post</span> <span class="addr">30004892</span>  bl 30005f08</td><td class="c win"><span class="alias">post</span> <span class="addr">30004892</span>  bl 30005f08</td></tr>
+<tr class="ctx"><td colspan="3">z_sched_waitq_walk</td></tr>
+<tr><td class="rn">33</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f08</span>  stmdb sp!, {r4, r5, r6, r7, r8, r9, sl, lr}</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f08</span>  stmdb sp!, {r4, r5, r6, r7, r8, r9, sl, lr}</td></tr>
+<tr><td class="rn">34</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f0c</span>  mov r8, r0</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f0c</span>  mov r8, r0</td></tr>
+<tr><td class="rn">35</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f0e</span>  mov r7, r1</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f0e</span>  mov r7, r1</td></tr>
+<tr><td class="rn">36</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f10</span>  mov r9, r2</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f10</span>  mov r9, r2</td></tr>
+<tr><td class="rn">37</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f12</span>  mov r5, r3</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f12</span>  mov r5, r3</td></tr>
+<tr><td class="rn">38</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f14</span>  movs r3, #0</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f14</span>  movs r3, #0</td></tr>
+<tr><td class="rn">39</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f16</span>  mrs sl, BASEPRI</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f16</span>  mrs sl, BASEPRI</td></tr>
+<tr><td class="rn">40</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f1a</span>  movs r2, #32</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f1a</span>  movs r2, #32</td></tr>
+<tr><td class="rn">41</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f1c</span>  msr BASEPRI_MAX, r2</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f1c</span>  msr BASEPRI_MAX, r2</td></tr>
+<tr><td class="rn">42</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f20</span>  isb sy</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f20</span>  isb sy</td></tr>
+<tr><td class="rn">43</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f24</span>  mov r6, r3</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f24</span>  mov r6, r3</td></tr>
+<tr><td class="rn">44</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f26</span>  b.n 30005f7c</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f26</span>  b.n 30005f7c</td></tr>
+<tr><td class="rn">45</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f7c</span>  cbnz r3, 30005fa4</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f7c</span>  cbnz r3, 30005fa4</td></tr>
+<tr><td class="rn">46</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f7e</span>  ldr.w r0, [r8]</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f7e</span>  ldr.w r0, [r8]</td></tr>
+<tr><td class="rn">47</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f82</span>  cmp r8, r0</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f82</span>  cmp r8, r0</td></tr>
+<tr><td class="rn">48</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f84</span>  beq.n 30005f28</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f84</span>  beq.n 30005f28</td></tr>
+<tr><td class="rn">49</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f86</span>  cmp r0, #0</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f86</span>  cmp r0, #0</td></tr>
+<tr><td class="rn">50</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f88</span>  beq.n 30005f2c</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f88</span>  beq.n 30005f2c</td></tr>
+<tr><td class="rn">51</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f8a</span>  cmp r0, #0</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f8a</span>  cmp r0, #0</td></tr>
+<tr><td class="rn">52</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f8c</span>  beq.n 30005f30</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f8c</span>  beq.n 30005f30</td></tr>
+<tr><td class="rn">53</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f8e</span>  ldr.w r3, [r8, #4]</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f8e</span>  ldr.w r3, [r8, #4]</td></tr>
+<tr><td class="rn">54</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f92</span>  cmp r0, r3</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f92</span>  cmp r0, r3</td></tr>
+<tr><td class="rn">55</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f94</span>  beq.n 30005f34</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f94</span>  beq.n 30005f34</td></tr>
+<tr><td class="rn">56</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f96</span>  ldr r4, [r0, #0]</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f96</span>  ldr r4, [r0, #0]</td></tr>
+<tr><td class="rn">57</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f98</span>  cmp r4, #0</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f98</span>  cmp r4, #0</td></tr>
+<tr><td class="rn">58</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f9a</span>  beq.n 30005f3e</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f9a</span>  beq.n 30005f3e</td></tr>
+<tr><td class="rn">59</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f9c</span>  cmp r0, #0</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f9c</span>  cmp r0, #0</td></tr>
+<tr><td class="rn">60</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f9e</span>  bne.n 30005f3e</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f9e</span>  bne.n 30005f3e</td></tr>
+<tr><td class="rn">61</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f3e</span>  cbz r0, 30005f66</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f3e</span>  cbz r0, 30005f66</td></tr>
+<tr><td class="rn">62</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f40</span>  mov r1, r5</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f40</span>  mov r1, r5</td></tr>
+<tr><td class="rn">63</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f42</span>  blx r7</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f42</span>  blx r7</td></tr>
+<tr class="ctx"><td colspan="3">event_walk_op</td></tr>
+<tr><td class="rn">64</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">3000609e</span>  push {r4, r5, r6, lr}</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">3000609e</span>  push {r4, r5, r6, lr}</td></tr>
+<tr><td class="rn">65</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060a0</span>  mov r4, r0</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060a0</span>  mov r4, r0</td></tr>
+<tr><td class="rn">66</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060a2</span>  mov r5, r1</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060a2</span>  mov r5, r1</td></tr>
+<tr><td class="rn">67</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060a4</span>  ldr r6, [r0, #100]</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060a4</span>  ldr r6, [r0, #100]</td></tr>
+<tr><td class="rn">68</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060a6</span>  and.w r2, r6, #1</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060a6</span>  and.w r2, r6, #1</td></tr>
+<tr><td class="rn">69</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060aa</span>  ldr r1, [r1, #0]</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060aa</span>  ldr r1, [r1, #0]</td></tr>
+<tr><td class="rn">70</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060ac</span>  ldr r0, [r0, #96]</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060ac</span>  ldr r0, [r0, #96]</td></tr>
+<tr><td class="rn">71</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060ae</span>  bl 3000608c</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060ae</span>  bl 3000608c</td></tr>
+<tr class="ctx"><td colspan="3">are_wait_conditions_met</td></tr>
+<tr><td class="rn">72</td><td class="c win"><span class="alias">cond</span> <span class="addr">3000608c</span>  mov r3, r0</td><td class="c win"><span class="alias">cond</span> <span class="addr">3000608c</span>  mov r3, r0</td></tr>
+<tr><td class="rn">73</td><td class="c win"><span class="alias">cond</span> <span class="addr">3000608e</span>  ands r0, r1</td><td class="c win"><span class="alias">cond</span> <span class="addr">3000608e</span>  ands r0, r1</td></tr>
+<tr><td class="rn">74</td><td class="c win"><span class="alias">cond</span> <span class="addr">30006090</span>  cmp r2, #1</td><td class="c win"><span class="alias">cond</span> <span class="addr">30006090</span>  cmp r2, #1</td></tr>
+<tr><td class="rn">75</td><td class="c win"><span class="alias">cond</span> <span class="addr">30006092</span>  beq.n 30006096</td><td class="c win"><span class="alias">cond</span> <span class="addr">30006092</span>  beq.n 30006096</td></tr>
+<tr><td class="rn">76</td><td class="c win"><span class="alias">cond</span> <span class="addr">30006094</span>  bx lr</td><td class="c win"><span class="alias">cond</span> <span class="addr">30006094</span>  bx lr</td></tr>
+<tr class="ctx"><td colspan="3">event_walk_op</td></tr>
+<tr><td class="rn">77</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060b2</span>  cbz r0, 300060d6</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060b2</span>  cbz r0, 300060d6</td></tr>
+<tr><td class="rn">78</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060b4</span>  str r0, [r4, #96]</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060b4</span>  str r0, [r4, #96]</td></tr>
+<tr><td class="rn">79</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060b6</span>  tst.w r6, #4</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060b6</span>  tst.w r6, #4</td></tr>
+<tr><td class="rn">80</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060ba</span>  beq.n 300060c2</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060ba</span>  beq.n 300060c2</td></tr>
+<tr><td class="rn">81</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060bc</span>  ldr r2, [r5, #4]</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060bc</span>  ldr r2, [r5, #4]</td></tr>
+<tr><td class="rn">82</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060be</span>  orrs r2, r0</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060be</span>  orrs r2, r0</td></tr>
+<tr><td class="rn">83</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060c0</span>  str r2, [r5, #4]</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060c0</span>  str r2, [r5, #4]</td></tr>
+<tr><td class="rn">84</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060c2</span>  add.w r0, r4, #24</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060c2</span>  add.w r0, r4, #24</td></tr>
+<tr><td class="rn">85</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060c6</span>  bl 3000600e</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060c6</span>  bl 3000600e</td></tr>
+<tr><td class="rn">86</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060ca</span>  movs r3, #0</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060ca</span>  movs r3, #0</td></tr>
+<tr><td class="rn">87</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060cc</span>  str.w r3, [r4, #128]</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060cc</span>  str.w r3, [r4, #128]</td></tr>
+<tr><td class="rn">88</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060d0</span>  mov r0, r4</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060d0</span>  mov r0, r4</td></tr>
+<tr><td class="rn">89</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060d2</span>  bl 30005e96</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060d2</span>  bl 30005e96</td></tr>
+<tr class="ctx"><td colspan="3">z_sched_wake_thread_locked</td></tr>
+<tr><td class="rn">90</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005e96</span>  push {r3, lr}</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005e96</span>  push {r3, lr}</td></tr>
+<tr><td class="rn">91</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005e98</span>  ldrb r3, [r0, #16]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005e98</span>  ldrb r3, [r0, #16]</td></tr>
+<tr><td class="rn">92</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005e9a</span>  tst.w r3, #40</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005e9a</span>  tst.w r3, #40</td></tr>
+<tr><td class="rn">93</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005e9e</span>  bne.n 30005ec8</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005e9e</span>  bne.n 30005ec8</td></tr>
+<tr><td class="rn">94</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea0</span>  ldr r3, [r0, #8]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea0</span>  ldr r3, [r0, #8]</td></tr>
+<tr><td class="rn">95</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea2</span>  cbz r3, 30005ebc</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea2</span>  cbz r3, 30005ebc</td></tr>
+<tr><td class="rn">96</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea4</span>  ldr r2, [r0, #4]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea4</span>  ldr r2, [r0, #4]</td></tr>
+<tr><td class="rn">97</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea6</span>  ldr r3, [r0, #0]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea6</span>  ldr r3, [r0, #0]</td></tr>
+<tr><td class="rn">98</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea8</span>  str r3, [r2, #0]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea8</span>  str r3, [r2, #0]</td></tr>
+<tr><td class="rn">99</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eaa</span>  str r2, [r3, #4]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eaa</span>  str r2, [r3, #4]</td></tr>
+<tr><td class="rn">100</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eac</span>  movs r3, #0</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eac</span>  movs r3, #0</td></tr>
+<tr><td class="rn">101</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eae</span>  str r3, [r0, #0]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eae</span>  str r3, [r0, #0]</td></tr>
+<tr><td class="rn">102</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eb0</span>  str r3, [r0, #4]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eb0</span>  str r3, [r0, #4]</td></tr>
+<tr><td class="rn">103</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eb2</span>  ldrb r2, [r0, #16]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eb2</span>  ldrb r2, [r0, #16]</td></tr>
+<tr><td class="rn">104</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eb4</span>  bic.w r2, r2, #2</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eb4</span>  bic.w r2, r2, #2</td></tr>
+<tr><td class="rn">105</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eb8</span>  strb r2, [r0, #16]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eb8</span>  strb r2, [r0, #16]</td></tr>
+<tr><td class="rn">106</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eba</span>  str r3, [r0, #8]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eba</span>  str r3, [r0, #8]</td></tr>
+<tr><td class="rn">107</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ebc</span>  ldrb r3, [r0, #16]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ebc</span>  ldrb r3, [r0, #16]</td></tr>
+<tr><td class="rn">108</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ebe</span>  bic.w r3, r3, #4</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ebe</span>  bic.w r3, r3, #4</td></tr>
+<tr><td class="rn">109</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ec2</span>  strb r3, [r0, #16]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ec2</span>  strb r3, [r0, #16]</td></tr>
+<tr><td class="rn">110</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ec4</span>  bl 30003fd4</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ec4</span>  bl 30003fd4</td></tr>
+<tr class="ctx"><td colspan="3">ready_thread</td></tr>
+<tr><td class="rn">111</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fd4</span>  ldrb r3, [r0, #16]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fd4</span>  ldrb r3, [r0, #16]</td></tr>
+<tr><td class="rn">112</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fd6</span>  ldrsb.w r2, [r0, #16]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fd6</span>  ldrsb.w r2, [r0, #16]</td></tr>
+<tr><td class="rn">113</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fda</span>  cmp r2, #0</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fda</span>  cmp r2, #0</td></tr>
+<tr><td class="rn">114</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fdc</span>  blt.n 3000404c</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fdc</span>  blt.n 3000404c</td></tr>
+<tr><td class="rn">115</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fde</span>  tst.w r3, #31</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fde</span>  tst.w r3, #31</td></tr>
+<tr><td class="rn">116</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fe2</span>  bne.n 3000404c</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fe2</span>  bne.n 3000404c</td></tr>
+<tr><td class="rn">117</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fe4</span>  orn r3, r3, #127</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fe4</span>  orn r3, r3, #127</td></tr>
+<tr><td class="rn">118</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fe8</span>  strb r3, [r0, #16]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fe8</span>  strb r3, [r0, #16]</td></tr>
+<tr><td class="rn">119</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fea</span>  ldr r2, [pc, #132]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fea</span>  ldr r2, [pc, #132]</td></tr>
+<tr><td class="rn">120</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fec</span>  ldr.w r3, [r2, #24]!</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fec</span>  ldr.w r3, [r2, #24]!</td></tr>
+<tr><td class="rn">121</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003ff0</span>  cmp r3, r2</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003ff0</span>  cmp r3, r2</td></tr>
+<tr><td class="rn">122</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003ff2</span>  beq.n 30004060</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003ff2</span>  beq.n 30004060</td></tr>
+<tr class="sec"><td colspan="3">pass 1 &mdash; terminal pass &mdash; insert before &nbsp;|&nbsp; pass 1 &mdash; scan pass &mdash; steps over one run-queue entry</td></tr>
+<tr><td class="rn">123</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30003ff4</span>  cbz r3, 30004016</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ff4</span>  cbz r3, 30004016</td></tr>
+<tr><td class="rn">124</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30003ff6</span>  ldrsb.w r1, [r0, #14]</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ff6</span>  ldrsb.w r1, [r0, #14]</td></tr>
+<tr><td class="rn">125</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30003ffa</span>  ldrsb.w r2, [r3, #14]</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ffa</span>  ldrsb.w r2, [r3, #14]</td></tr>
+<tr><td class="rn">126</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30003ffe</span>  cmp r1, r2</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ffe</span>  cmp r1, r2</td></tr>
+<tr><td class="rn">127</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004000</span>  beq.n 30004008</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004000</span>  beq.n 30004008</td></tr>
+<tr><td class="rn">128</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004002</span>  subs r2, r2, r1</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004002</span>  subs r2, r2, r1</td></tr>
+<tr><td class="rn">129</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004004</span>  cmp r2, #0</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004004</span>  cmp r2, #0</td></tr>
+<tr><td class="rn">130</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004006</span>  bgt.n 3000404e</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004006</span>  bgt.n 3000404e</td></tr>
+<tr class="sec"><td colspan="3">pass 1 &mdash; insert-before body &nbsp;|&nbsp; pass 1 &mdash; scan pass &mdash; steps over one run-queue entry</td></tr>
+<tr class="diff"><td class="rn">131</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">3000404e</span>  ldr r2, [r3, #4]</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004008</span>  mov r1, r3</td></tr>
+<tr class="diff"><td class="rn">132</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004050</span>  str r2, [r0, #4]</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000400a</span>  ldr r2, [pc, #100]</td></tr>
+<tr class="diff"><td class="rn">133</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004052</span>  str r3, [r0, #0]</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000400c</span>  ldr r2, [r2, #28]</td></tr>
+<tr class="diff"><td class="rn">134</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004054</span>  str r0, [r2, #0]</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000400e</span>  cmp r3, r2</td></tr>
+<tr class="diff"><td class="rn">135</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004056</span>  str r0, [r3, #4]</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004010</span>  beq.n 30004016</td></tr>
+<tr class="diff"><td class="rn">136</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004058</span>  b.n 30004026</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004012</span>  ldr r3, [r3, #0]</td></tr>
+<tr class="sec"><td colspan="3">&mdash; &nbsp;|&nbsp; pass 1 &mdash; scan pass &mdash; steps over one run-queue entry</td></tr>
+<tr class="diff"><td class="rn">137</td><td class="c"></td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004014</span>  cbnz r3, 3000405a</td></tr>
+<tr class="diff"><td class="rn">138</td><td class="c"></td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000405a</span>  cmp r1, #0</td></tr>
+<tr class="diff"><td class="rn">139</td><td class="c"></td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000405c</span>  bne.n 30003ff4</td></tr>
+<tr class="sec"><td colspan="3">&mdash; &nbsp;|&nbsp; pass 2 &mdash; terminal pass &mdash; insert before</td></tr>
+<tr class="diff"><td class="rn">140</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30003ff4</span>  cbz r3, 30004016</td></tr>
+<tr class="diff"><td class="rn">141</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30003ff6</span>  ldrsb.w r1, [r0, #14]</td></tr>
+<tr class="diff"><td class="rn">142</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30003ffa</span>  ldrsb.w r2, [r3, #14]</td></tr>
+<tr class="diff"><td class="rn">143</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30003ffe</span>  cmp r1, r2</td></tr>
+<tr class="diff"><td class="rn">144</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004000</span>  beq.n 30004008</td></tr>
+<tr class="diff"><td class="rn">145</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004002</span>  subs r2, r2, r1</td></tr>
+<tr class="diff"><td class="rn">146</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004004</span>  cmp r2, #0</td></tr>
+<tr class="diff"><td class="rn">147</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004006</span>  bgt.n 3000404e</td></tr>
+<tr class="sec"><td colspan="3">&mdash; &nbsp;|&nbsp; pass 2 &mdash; insert-before body</td></tr>
+<tr class="diff"><td class="rn">148</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">3000404e</span>  ldr r2, [r3, #4]</td></tr>
+<tr class="diff"><td class="rn">149</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004050</span>  str r2, [r0, #4]</td></tr>
+<tr class="diff"><td class="rn">150</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004052</span>  str r3, [r0, #0]</td></tr>
+<tr class="diff"><td class="rn">151</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004054</span>  str r0, [r2, #0]</td></tr>
+<tr class="diff"><td class="rn">152</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004056</span>  str r0, [r3, #4]</td></tr>
+<tr class="diff"><td class="rn">153</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004058</span>  b.n 30004026</td></tr>
+<tr><td class="rn">154</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004026</span>  ldr r2, [pc, #72]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004026</span>  ldr r2, [pc, #72]</td></tr>
+<tr><td class="rn">155</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004028</span>  ldr.w r3, [r2, #24]!</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004028</span>  ldr.w r3, [r2, #24]!</td></tr>
+<tr><td class="rn">156</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000402c</span>  cmp r3, r2</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000402c</span>  cmp r3, r2</td></tr>
+<tr><td class="rn">157</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000402e</span>  beq.n 30004064</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000402e</span>  beq.n 30004064</td></tr>
+<tr><td class="rn">158</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004030</span>  cbz r3, 30004064</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004030</span>  cbz r3, 30004064</td></tr>
+<tr><td class="rn">159</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004032</span>  ldr r2, [pc, #60]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004032</span>  ldr r2, [pc, #60]</td></tr>
+<tr><td class="rn">160</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004034</span>  ldr r2, [r2, #8]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004034</span>  ldr r2, [r2, #8]</td></tr>
+<tr><td class="rn">161</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004036</span>  ldrb r1, [r2, #16]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004036</span>  ldrb r1, [r2, #16]</td></tr>
+<tr><td class="rn">162</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004038</span>  tst.w r1, #31</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004038</span>  tst.w r1, #31</td></tr>
+<tr><td class="rn">163</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000403c</span>  bne.n 30004048</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000403c</span>  bne.n 30004048</td></tr>
+<tr><td class="rn">164</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000403e</span>  ldrh r1, [r2, #14]</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000403e</span>  ldrh r1, [r2, #14]</td></tr>
+<tr><td class="rn">165</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004040</span>  cmp r1, #127</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004040</span>  cmp r1, #127</td></tr>
+<tr><td class="rn">166</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004042</span>  bls.n 30004048</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004042</span>  bls.n 30004048</td></tr>
+<tr><td class="rn">167</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004048</span>  ldr r2, [pc, #36]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004048</span>  ldr r2, [pc, #36]</td></tr>
+<tr><td class="rn">168</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000404a</span>  str r3, [r2, #20]</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000404a</span>  str r3, [r2, #20]</td></tr>
+<tr><td class="rn">169</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000404c</span>  bx lr</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000404c</span>  bx lr</td></tr>
+<tr class="ctx"><td colspan="3">z_sched_wake_thread_locked</td></tr>
+<tr><td class="rn">170</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ec8</span>  pop {r3, pc}</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ec8</span>  pop {r3, pc}</td></tr>
+<tr class="ctx"><td colspan="3">event_walk_op</td></tr>
+<tr><td class="rn">171</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060d6</span>  movs r0, #0</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060d6</span>  movs r0, #0</td></tr>
+<tr><td class="rn">172</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060d8</span>  pop {r4, r5, r6, pc}</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060d8</span>  pop {r4, r5, r6, pc}</td></tr>
+<tr class="ctx"><td colspan="3">z_sched_waitq_walk</td></tr>
+<tr><td class="rn">173</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f44</span>  mov r6, r0</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f44</span>  mov r6, r0</td></tr>
+<tr><td class="rn">174</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f46</span>  cbnz r0, 30005f66</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f46</span>  cbnz r0, 30005f66</td></tr>
+<tr><td class="rn">175</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f48</span>  cmp r4, #0</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f48</span>  cmp r4, #0</td></tr>
+<tr><td class="rn">176</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f4a</span>  beq.n 30005f38</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f4a</span>  beq.n 30005f38</td></tr>
+<tr><td class="rn">177</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f4c</span>  ldr.w r3, [r8, #4]</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f4c</span>  ldr.w r3, [r8, #4]</td></tr>
+<tr><td class="rn">178</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f50</span>  cmp r4, r3</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f50</span>  cmp r4, r3</td></tr>
+<tr><td class="rn">179</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f52</span>  beq.n 30005f62</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f52</span>  beq.n 30005f62</td></tr>
+<tr class="diff"><td class="rn">180</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f54</span>  ldr r3, [r4, #0]</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f62</span>  movs r3, #0</td></tr>
+<tr class="diff"><td class="rn">181</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f56</span>  cmp r3, #0</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f64</span>  b.n 30005f3a</td></tr>
+<tr class="diff"><td class="rn">182</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f58</span>  beq.n 30005f3a</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">183</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f5a</span>  cmp r4, #0</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">184</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f5c</span>  bne.n 30005f3a</td><td class="c"></td></tr>
+<tr><td class="rn">185</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f3a</span>  mov r0, r4</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f3a</span>  mov r0, r4</td></tr>
+<tr><td class="rn">186</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f3c</span>  mov r4, r3</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f3c</span>  mov r4, r3</td></tr>
+<tr><td class="rn">187</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f3e</span>  cbz r0, 30005f66</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f3e</span>  cbz r0, 30005f66</td></tr>
+<tr><td class="rn">188</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f40</span>  mov r1, r5</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f40</span>  mov r1, r5</td></tr>
+<tr><td class="rn">189</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f42</span>  blx r7</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f42</span>  blx r7</td></tr>
+<tr class="ctx"><td colspan="3">event_walk_op</td></tr>
+<tr><td class="rn">190</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">3000609e</span>  push {r4, r5, r6, lr}</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">3000609e</span>  push {r4, r5, r6, lr}</td></tr>
+<tr><td class="rn">191</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060a0</span>  mov r4, r0</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060a0</span>  mov r4, r0</td></tr>
+<tr><td class="rn">192</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060a2</span>  mov r5, r1</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060a2</span>  mov r5, r1</td></tr>
+<tr><td class="rn">193</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060a4</span>  ldr r6, [r0, #100]</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060a4</span>  ldr r6, [r0, #100]</td></tr>
+<tr><td class="rn">194</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060a6</span>  and.w r2, r6, #1</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060a6</span>  and.w r2, r6, #1</td></tr>
+<tr><td class="rn">195</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060aa</span>  ldr r1, [r1, #0]</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060aa</span>  ldr r1, [r1, #0]</td></tr>
+<tr><td class="rn">196</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060ac</span>  ldr r0, [r0, #96]</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060ac</span>  ldr r0, [r0, #96]</td></tr>
+<tr><td class="rn">197</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060ae</span>  bl 3000608c</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060ae</span>  bl 3000608c</td></tr>
+<tr class="ctx"><td colspan="3">are_wait_conditions_met</td></tr>
+<tr><td class="rn">198</td><td class="c win"><span class="alias">cond</span> <span class="addr">3000608c</span>  mov r3, r0</td><td class="c win"><span class="alias">cond</span> <span class="addr">3000608c</span>  mov r3, r0</td></tr>
+<tr><td class="rn">199</td><td class="c win"><span class="alias">cond</span> <span class="addr">3000608e</span>  ands r0, r1</td><td class="c win"><span class="alias">cond</span> <span class="addr">3000608e</span>  ands r0, r1</td></tr>
+<tr><td class="rn">200</td><td class="c win"><span class="alias">cond</span> <span class="addr">30006090</span>  cmp r2, #1</td><td class="c win"><span class="alias">cond</span> <span class="addr">30006090</span>  cmp r2, #1</td></tr>
+<tr><td class="rn">201</td><td class="c win"><span class="alias">cond</span> <span class="addr">30006092</span>  beq.n 30006096</td><td class="c win"><span class="alias">cond</span> <span class="addr">30006092</span>  beq.n 30006096</td></tr>
+<tr><td class="rn">202</td><td class="c win"><span class="alias">cond</span> <span class="addr">30006094</span>  bx lr</td><td class="c win"><span class="alias">cond</span> <span class="addr">30006094</span>  bx lr</td></tr>
+<tr class="ctx"><td colspan="3">event_walk_op</td></tr>
+<tr><td class="rn">203</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060b2</span>  cbz r0, 300060d6</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060b2</span>  cbz r0, 300060d6</td></tr>
+<tr><td class="rn">204</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060b4</span>  str r0, [r4, #96]</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060b4</span>  str r0, [r4, #96]</td></tr>
+<tr><td class="rn">205</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060b6</span>  tst.w r6, #4</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060b6</span>  tst.w r6, #4</td></tr>
+<tr><td class="rn">206</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060ba</span>  beq.n 300060c2</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060ba</span>  beq.n 300060c2</td></tr>
+<tr><td class="rn">207</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060bc</span>  ldr r2, [r5, #4]</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060bc</span>  ldr r2, [r5, #4]</td></tr>
+<tr><td class="rn">208</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060be</span>  orrs r2, r0</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060be</span>  orrs r2, r0</td></tr>
+<tr><td class="rn">209</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060c0</span>  str r2, [r5, #4]</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060c0</span>  str r2, [r5, #4]</td></tr>
+<tr><td class="rn">210</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060c2</span>  add.w r0, r4, #24</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060c2</span>  add.w r0, r4, #24</td></tr>
+<tr><td class="rn">211</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060c6</span>  bl 3000600e</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060c6</span>  bl 3000600e</td></tr>
+<tr><td class="rn">212</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060ca</span>  movs r3, #0</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060ca</span>  movs r3, #0</td></tr>
+<tr><td class="rn">213</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060cc</span>  str.w r3, [r4, #128]</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060cc</span>  str.w r3, [r4, #128]</td></tr>
+<tr><td class="rn">214</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060d0</span>  mov r0, r4</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060d0</span>  mov r0, r4</td></tr>
+<tr><td class="rn">215</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060d2</span>  bl 30005e96</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060d2</span>  bl 30005e96</td></tr>
+<tr class="ctx"><td colspan="3">z_sched_wake_thread_locked</td></tr>
+<tr><td class="rn">216</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005e96</span>  push {r3, lr}</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005e96</span>  push {r3, lr}</td></tr>
+<tr><td class="rn">217</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005e98</span>  ldrb r3, [r0, #16]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005e98</span>  ldrb r3, [r0, #16]</td></tr>
+<tr><td class="rn">218</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005e9a</span>  tst.w r3, #40</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005e9a</span>  tst.w r3, #40</td></tr>
+<tr><td class="rn">219</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005e9e</span>  bne.n 30005ec8</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005e9e</span>  bne.n 30005ec8</td></tr>
+<tr><td class="rn">220</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea0</span>  ldr r3, [r0, #8]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea0</span>  ldr r3, [r0, #8]</td></tr>
+<tr><td class="rn">221</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea2</span>  cbz r3, 30005ebc</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea2</span>  cbz r3, 30005ebc</td></tr>
+<tr><td class="rn">222</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea4</span>  ldr r2, [r0, #4]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea4</span>  ldr r2, [r0, #4]</td></tr>
+<tr><td class="rn">223</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea6</span>  ldr r3, [r0, #0]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea6</span>  ldr r3, [r0, #0]</td></tr>
+<tr><td class="rn">224</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea8</span>  str r3, [r2, #0]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea8</span>  str r3, [r2, #0]</td></tr>
+<tr><td class="rn">225</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eaa</span>  str r2, [r3, #4]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eaa</span>  str r2, [r3, #4]</td></tr>
+<tr><td class="rn">226</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eac</span>  movs r3, #0</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eac</span>  movs r3, #0</td></tr>
+<tr><td class="rn">227</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eae</span>  str r3, [r0, #0]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eae</span>  str r3, [r0, #0]</td></tr>
+<tr><td class="rn">228</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eb0</span>  str r3, [r0, #4]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eb0</span>  str r3, [r0, #4]</td></tr>
+<tr><td class="rn">229</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eb2</span>  ldrb r2, [r0, #16]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eb2</span>  ldrb r2, [r0, #16]</td></tr>
+<tr><td class="rn">230</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eb4</span>  bic.w r2, r2, #2</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eb4</span>  bic.w r2, r2, #2</td></tr>
+<tr><td class="rn">231</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eb8</span>  strb r2, [r0, #16]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eb8</span>  strb r2, [r0, #16]</td></tr>
+<tr><td class="rn">232</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eba</span>  str r3, [r0, #8]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eba</span>  str r3, [r0, #8]</td></tr>
+<tr><td class="rn">233</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ebc</span>  ldrb r3, [r0, #16]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ebc</span>  ldrb r3, [r0, #16]</td></tr>
+<tr><td class="rn">234</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ebe</span>  bic.w r3, r3, #4</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ebe</span>  bic.w r3, r3, #4</td></tr>
+<tr><td class="rn">235</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ec2</span>  strb r3, [r0, #16]</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ec2</span>  strb r3, [r0, #16]</td></tr>
+<tr><td class="rn">236</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ec4</span>  bl 30003fd4</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ec4</span>  bl 30003fd4</td></tr>
+<tr class="ctx"><td colspan="3">ready_thread</td></tr>
+<tr><td class="rn">237</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fd4</span>  ldrb r3, [r0, #16]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fd4</span>  ldrb r3, [r0, #16]</td></tr>
+<tr><td class="rn">238</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fd6</span>  ldrsb.w r2, [r0, #16]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fd6</span>  ldrsb.w r2, [r0, #16]</td></tr>
+<tr><td class="rn">239</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fda</span>  cmp r2, #0</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fda</span>  cmp r2, #0</td></tr>
+<tr><td class="rn">240</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fdc</span>  blt.n 3000404c</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fdc</span>  blt.n 3000404c</td></tr>
+<tr><td class="rn">241</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fde</span>  tst.w r3, #31</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fde</span>  tst.w r3, #31</td></tr>
+<tr><td class="rn">242</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fe2</span>  bne.n 3000404c</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fe2</span>  bne.n 3000404c</td></tr>
+<tr><td class="rn">243</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fe4</span>  orn r3, r3, #127</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fe4</span>  orn r3, r3, #127</td></tr>
+<tr><td class="rn">244</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fe8</span>  strb r3, [r0, #16]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fe8</span>  strb r3, [r0, #16]</td></tr>
+<tr><td class="rn">245</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fea</span>  ldr r2, [pc, #132]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fea</span>  ldr r2, [pc, #132]</td></tr>
+<tr><td class="rn">246</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fec</span>  ldr.w r3, [r2, #24]!</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fec</span>  ldr.w r3, [r2, #24]!</td></tr>
+<tr><td class="rn">247</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003ff0</span>  cmp r3, r2</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003ff0</span>  cmp r3, r2</td></tr>
+<tr><td class="rn">248</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003ff2</span>  beq.n 30004060</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003ff2</span>  beq.n 30004060</td></tr>
+<tr class="sec"><td colspan="3">wake 2, pass 1 &mdash; scan pass &mdash; steps over one run-queue entry &nbsp;|&nbsp; wake 2, pass 1 &mdash; scan pass &mdash; steps over one run-queue entry</td></tr>
+<tr><td class="rn">249</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ff4</span>  cbz r3, 30004016</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ff4</span>  cbz r3, 30004016</td></tr>
+<tr><td class="rn">250</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ff6</span>  ldrsb.w r1, [r0, #14]</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ff6</span>  ldrsb.w r1, [r0, #14]</td></tr>
+<tr><td class="rn">251</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ffa</span>  ldrsb.w r2, [r3, #14]</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ffa</span>  ldrsb.w r2, [r3, #14]</td></tr>
+<tr><td class="rn">252</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ffe</span>  cmp r1, r2</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ffe</span>  cmp r1, r2</td></tr>
+<tr><td class="rn">253</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004000</span>  beq.n 30004008</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004000</span>  beq.n 30004008</td></tr>
+<tr><td class="rn">254</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004002</span>  subs r2, r2, r1</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004002</span>  subs r2, r2, r1</td></tr>
+<tr><td class="rn">255</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004004</span>  cmp r2, #0</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004004</span>  cmp r2, #0</td></tr>
+<tr><td class="rn">256</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004006</span>  bgt.n 3000404e</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004006</span>  bgt.n 3000404e</td></tr>
+<tr><td class="rn">257</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004008</span>  mov r1, r3</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004008</span>  mov r1, r3</td></tr>
+<tr><td class="rn">258</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000400a</span>  ldr r2, [pc, #100]</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000400a</span>  ldr r2, [pc, #100]</td></tr>
+<tr><td class="rn">259</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000400c</span>  ldr r2, [r2, #28]</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000400c</span>  ldr r2, [r2, #28]</td></tr>
+<tr><td class="rn">260</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000400e</span>  cmp r3, r2</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000400e</span>  cmp r3, r2</td></tr>
+<tr><td class="rn">261</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004010</span>  beq.n 30004016</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004010</span>  beq.n 30004016</td></tr>
+<tr><td class="rn">262</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004012</span>  ldr r3, [r3, #0]</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004012</span>  ldr r3, [r3, #0]</td></tr>
+<tr><td class="rn">263</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004014</span>  cbnz r3, 3000405a</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004014</span>  cbnz r3, 3000405a</td></tr>
+<tr><td class="rn">264</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000405a</span>  cmp r1, #0</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000405a</span>  cmp r1, #0</td></tr>
+<tr><td class="rn">265</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000405c</span>  bne.n 30003ff4</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000405c</span>  bne.n 30003ff4</td></tr>
+<tr class="sec"><td colspan="3">wake 2, pass 2 &mdash; terminal pass &mdash; insert before &nbsp;|&nbsp; wake 2, pass 2 &mdash; scan pass &mdash; steps over one run-queue entry</td></tr>
+<tr><td class="rn">266</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30003ff4</span>  cbz r3, 30004016</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ff4</span>  cbz r3, 30004016</td></tr>
+<tr><td class="rn">267</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30003ff6</span>  ldrsb.w r1, [r0, #14]</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ff6</span>  ldrsb.w r1, [r0, #14]</td></tr>
+<tr><td class="rn">268</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30003ffa</span>  ldrsb.w r2, [r3, #14]</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ffa</span>  ldrsb.w r2, [r3, #14]</td></tr>
+<tr><td class="rn">269</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30003ffe</span>  cmp r1, r2</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ffe</span>  cmp r1, r2</td></tr>
+<tr><td class="rn">270</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004000</span>  beq.n 30004008</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004000</span>  beq.n 30004008</td></tr>
+<tr><td class="rn">271</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004002</span>  subs r2, r2, r1</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004002</span>  subs r2, r2, r1</td></tr>
+<tr><td class="rn">272</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004004</span>  cmp r2, #0</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004004</span>  cmp r2, #0</td></tr>
+<tr><td class="rn">273</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004006</span>  bgt.n 3000404e</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004006</span>  bgt.n 3000404e</td></tr>
+<tr class="sec"><td colspan="3">wake 2, pass 2 &mdash; insert-before body &nbsp;|&nbsp; wake 2, pass 2 &mdash; scan pass &mdash; steps over one run-queue entry</td></tr>
+<tr class="diff"><td class="rn">274</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">3000404e</span>  ldr r2, [r3, #4]</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004008</span>  mov r1, r3</td></tr>
+<tr class="diff"><td class="rn">275</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004050</span>  str r2, [r0, #4]</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000400a</span>  ldr r2, [pc, #100]</td></tr>
+<tr class="diff"><td class="rn">276</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004052</span>  str r3, [r0, #0]</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000400c</span>  ldr r2, [r2, #28]</td></tr>
+<tr class="diff"><td class="rn">277</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004054</span>  str r0, [r2, #0]</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000400e</span>  cmp r3, r2</td></tr>
+<tr class="diff"><td class="rn">278</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004056</span>  str r0, [r3, #4]</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004010</span>  beq.n 30004016</td></tr>
+<tr class="diff"><td class="rn">279</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004058</span>  b.n 30004026</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004012</span>  ldr r3, [r3, #0]</td></tr>
+<tr class="sec"><td colspan="3">&mdash; &nbsp;|&nbsp; wake 2, pass 2 &mdash; scan pass &mdash; steps over one run-queue entry</td></tr>
+<tr class="diff"><td class="rn">280</td><td class="c"></td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004014</span>  cbnz r3, 3000405a</td></tr>
+<tr class="diff"><td class="rn">281</td><td class="c"></td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000405a</span>  cmp r1, #0</td></tr>
+<tr class="diff"><td class="rn">282</td><td class="c"></td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000405c</span>  bne.n 30003ff4</td></tr>
+<tr class="sec"><td colspan="3">&mdash; &nbsp;|&nbsp; wake 2, pass 3 &mdash; terminal pass &mdash; insert before</td></tr>
+<tr class="diff"><td class="rn">283</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30003ff4</span>  cbz r3, 30004016</td></tr>
+<tr class="diff"><td class="rn">284</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30003ff6</span>  ldrsb.w r1, [r0, #14]</td></tr>
+<tr class="diff"><td class="rn">285</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30003ffa</span>  ldrsb.w r2, [r3, #14]</td></tr>
+<tr class="diff"><td class="rn">286</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30003ffe</span>  cmp r1, r2</td></tr>
+<tr class="diff"><td class="rn">287</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004000</span>  beq.n 30004008</td></tr>
+<tr class="diff"><td class="rn">288</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004002</span>  subs r2, r2, r1</td></tr>
+<tr class="diff"><td class="rn">289</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004004</span>  cmp r2, #0</td></tr>
+<tr class="diff"><td class="rn">290</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004006</span>  bgt.n 3000404e</td></tr>
+<tr class="sec"><td colspan="3">&mdash; &nbsp;|&nbsp; wake 2, pass 3 &mdash; insert-before body</td></tr>
+<tr class="diff"><td class="rn">291</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">3000404e</span>  ldr r2, [r3, #4]</td></tr>
+<tr class="diff"><td class="rn">292</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004050</span>  str r2, [r0, #4]</td></tr>
+<tr class="diff"><td class="rn">293</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004052</span>  str r3, [r0, #0]</td></tr>
+<tr class="diff"><td class="rn">294</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004054</span>  str r0, [r2, #0]</td></tr>
+<tr class="diff"><td class="rn">295</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004056</span>  str r0, [r3, #4]</td></tr>
+<tr class="diff"><td class="rn">296</td><td class="c"></td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004058</span>  b.n 30004026</td></tr>
+<tr><td class="rn">297</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004026</span>  ldr r2, [pc, #72]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004026</span>  ldr r2, [pc, #72]</td></tr>
+<tr><td class="rn">298</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004028</span>  ldr.w r3, [r2, #24]!</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004028</span>  ldr.w r3, [r2, #24]!</td></tr>
+<tr><td class="rn">299</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000402c</span>  cmp r3, r2</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000402c</span>  cmp r3, r2</td></tr>
+<tr><td class="rn">300</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000402e</span>  beq.n 30004064</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000402e</span>  beq.n 30004064</td></tr>
+<tr><td class="rn">301</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004030</span>  cbz r3, 30004064</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004030</span>  cbz r3, 30004064</td></tr>
+<tr><td class="rn">302</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004032</span>  ldr r2, [pc, #60]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004032</span>  ldr r2, [pc, #60]</td></tr>
+<tr><td class="rn">303</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004034</span>  ldr r2, [r2, #8]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004034</span>  ldr r2, [r2, #8]</td></tr>
+<tr><td class="rn">304</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004036</span>  ldrb r1, [r2, #16]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004036</span>  ldrb r1, [r2, #16]</td></tr>
+<tr><td class="rn">305</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004038</span>  tst.w r1, #31</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004038</span>  tst.w r1, #31</td></tr>
+<tr><td class="rn">306</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000403c</span>  bne.n 30004048</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000403c</span>  bne.n 30004048</td></tr>
+<tr><td class="rn">307</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000403e</span>  ldrh r1, [r2, #14]</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000403e</span>  ldrh r1, [r2, #14]</td></tr>
+<tr><td class="rn">308</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004040</span>  cmp r1, #127</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004040</span>  cmp r1, #127</td></tr>
+<tr><td class="rn">309</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004042</span>  bls.n 30004048</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004042</span>  bls.n 30004048</td></tr>
+<tr><td class="rn">310</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004048</span>  ldr r2, [pc, #36]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004048</span>  ldr r2, [pc, #36]</td></tr>
+<tr><td class="rn">311</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000404a</span>  str r3, [r2, #20]</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000404a</span>  str r3, [r2, #20]</td></tr>
+<tr><td class="rn">312</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000404c</span>  bx lr</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000404c</span>  bx lr</td></tr>
+<tr class="ctx"><td colspan="3">z_sched_wake_thread_locked</td></tr>
+<tr><td class="rn">313</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ec8</span>  pop {r3, pc}</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ec8</span>  pop {r3, pc}</td></tr>
+<tr class="ctx"><td colspan="3">event_walk_op</td></tr>
+<tr><td class="rn">314</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060d6</span>  movs r0, #0</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060d6</span>  movs r0, #0</td></tr>
+<tr><td class="rn">315</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060d8</span>  pop {r4, r5, r6, pc}</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060d8</span>  pop {r4, r5, r6, pc}</td></tr>
+<tr class="ctx"><td colspan="3">z_sched_waitq_walk</td></tr>
+<tr><td class="rn">316</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f44</span>  mov r6, r0</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f44</span>  mov r6, r0</td></tr>
+<tr><td class="rn">317</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f46</span>  cbnz r0, 30005f66</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f46</span>  cbnz r0, 30005f66</td></tr>
+<tr><td class="rn">318</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f48</span>  cmp r4, #0</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f48</span>  cmp r4, #0</td></tr>
+<tr><td class="rn">319</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f4a</span>  beq.n 30005f38</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f4a</span>  beq.n 30005f38</td></tr>
+<tr class="diff"><td class="rn">320</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f4c</span>  ldr.w r3, [r8, #4]</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f38</span>  mov r3, r4</td></tr>
+<tr class="diff"><td class="rn">321</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f50</span>  cmp r4, r3</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">322</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f52</span>  beq.n 30005f62</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">323</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f62</span>  movs r3, #0</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">324</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f64</span>  b.n 30005f3a</td><td class="c"></td></tr>
+<tr><td class="rn">325</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f3a</span>  mov r0, r4</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f3a</span>  mov r0, r4</td></tr>
+<tr><td class="rn">326</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f3c</span>  mov r4, r3</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f3c</span>  mov r4, r3</td></tr>
+<tr><td class="rn">327</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f3e</span>  cbz r0, 30005f66</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f3e</span>  cbz r0, 30005f66</td></tr>
+<tr class="diff"><td class="rn">328</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f40</span>  mov r1, r5</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">329</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f42</span>  blx r7</td><td class="c"></td></tr>
+<tr class="ctx"><td colspan="3">event_walk_op</td></tr>
+<tr class="diff"><td class="rn">330</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">3000609e</span>  push {r4, r5, r6, lr}</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">331</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060a0</span>  mov r4, r0</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">332</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060a2</span>  mov r5, r1</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">333</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060a4</span>  ldr r6, [r0, #100]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">334</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060a6</span>  and.w r2, r6, #1</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">335</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060aa</span>  ldr r1, [r1, #0]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">336</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060ac</span>  ldr r0, [r0, #96]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">337</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060ae</span>  bl 3000608c</td><td class="c"></td></tr>
+<tr class="ctx"><td colspan="3">are_wait_conditions_met</td></tr>
+<tr class="diff"><td class="rn">338</td><td class="c win"><span class="alias">cond</span> <span class="addr">3000608c</span>  mov r3, r0</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">339</td><td class="c win"><span class="alias">cond</span> <span class="addr">3000608e</span>  ands r0, r1</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">340</td><td class="c win"><span class="alias">cond</span> <span class="addr">30006090</span>  cmp r2, #1</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">341</td><td class="c win"><span class="alias">cond</span> <span class="addr">30006092</span>  beq.n 30006096</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">342</td><td class="c win"><span class="alias">cond</span> <span class="addr">30006094</span>  bx lr</td><td class="c"></td></tr>
+<tr class="ctx"><td colspan="3">event_walk_op</td></tr>
+<tr class="diff"><td class="rn">343</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060b2</span>  cbz r0, 300060d6</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">344</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060b4</span>  str r0, [r4, #96]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">345</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060b6</span>  tst.w r6, #4</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">346</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060ba</span>  beq.n 300060c2</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">347</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060bc</span>  ldr r2, [r5, #4]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">348</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060be</span>  orrs r2, r0</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">349</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060c0</span>  str r2, [r5, #4]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">350</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060c2</span>  add.w r0, r4, #24</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">351</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060c6</span>  bl 3000600e</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">352</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060ca</span>  movs r3, #0</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">353</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060cc</span>  str.w r3, [r4, #128]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">354</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060d0</span>  mov r0, r4</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">355</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060d2</span>  bl 30005e96</td><td class="c"></td></tr>
+<tr class="ctx"><td colspan="3">z_sched_wake_thread_locked</td></tr>
+<tr class="diff"><td class="rn">356</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005e96</span>  push {r3, lr}</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">357</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005e98</span>  ldrb r3, [r0, #16]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">358</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005e9a</span>  tst.w r3, #40</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">359</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005e9e</span>  bne.n 30005ec8</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">360</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea0</span>  ldr r3, [r0, #8]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">361</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea2</span>  cbz r3, 30005ebc</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">362</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea4</span>  ldr r2, [r0, #4]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">363</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea6</span>  ldr r3, [r0, #0]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">364</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ea8</span>  str r3, [r2, #0]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">365</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eaa</span>  str r2, [r3, #4]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">366</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eac</span>  movs r3, #0</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">367</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eae</span>  str r3, [r0, #0]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">368</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eb0</span>  str r3, [r0, #4]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">369</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eb2</span>  ldrb r2, [r0, #16]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">370</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eb4</span>  bic.w r2, r2, #2</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">371</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eb8</span>  strb r2, [r0, #16]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">372</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005eba</span>  str r3, [r0, #8]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">373</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ebc</span>  ldrb r3, [r0, #16]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">374</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ebe</span>  bic.w r3, r3, #4</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">375</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ec2</span>  strb r3, [r0, #16]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">376</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ec4</span>  bl 30003fd4</td><td class="c"></td></tr>
+<tr class="ctx"><td colspan="3">ready_thread</td></tr>
+<tr class="diff"><td class="rn">377</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fd4</span>  ldrb r3, [r0, #16]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">378</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fd6</span>  ldrsb.w r2, [r0, #16]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">379</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fda</span>  cmp r2, #0</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">380</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fdc</span>  blt.n 3000404c</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">381</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fde</span>  tst.w r3, #31</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">382</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fe2</span>  bne.n 3000404c</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">383</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fe4</span>  orn r3, r3, #127</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">384</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fe8</span>  strb r3, [r0, #16]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">385</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fea</span>  ldr r2, [pc, #132]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">386</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003fec</span>  ldr.w r3, [r2, #24]!</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">387</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003ff0</span>  cmp r3, r2</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">388</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003ff2</span>  beq.n 30004060</td><td class="c"></td></tr>
+<tr class="sec"><td colspan="3">wake 3, pass 1 &mdash; scan pass &mdash; steps over one run-queue entry &nbsp;|&nbsp; &mdash;</td></tr>
+<tr class="diff"><td class="rn">389</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ff4</span>  cbz r3, 30004016</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">390</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ff6</span>  ldrsb.w r1, [r0, #14]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">391</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ffa</span>  ldrsb.w r2, [r3, #14]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">392</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ffe</span>  cmp r1, r2</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">393</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004000</span>  beq.n 30004008</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">394</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004002</span>  subs r2, r2, r1</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">395</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004004</span>  cmp r2, #0</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">396</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004006</span>  bgt.n 3000404e</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">397</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004008</span>  mov r1, r3</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">398</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000400a</span>  ldr r2, [pc, #100]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">399</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000400c</span>  ldr r2, [r2, #28]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">400</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000400e</span>  cmp r3, r2</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">401</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004010</span>  beq.n 30004016</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">402</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004012</span>  ldr r3, [r3, #0]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">403</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004014</span>  cbnz r3, 3000405a</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">404</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000405a</span>  cmp r1, #0</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">405</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000405c</span>  bne.n 30003ff4</td><td class="c"></td></tr>
+<tr class="sec"><td colspan="3">wake 3, pass 2 &mdash; scan pass &mdash; steps over one run-queue entry &nbsp;|&nbsp; &mdash;</td></tr>
+<tr class="diff"><td class="rn">406</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ff4</span>  cbz r3, 30004016</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">407</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ff6</span>  ldrsb.w r1, [r0, #14]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">408</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ffa</span>  ldrsb.w r2, [r3, #14]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">409</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003ffe</span>  cmp r1, r2</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">410</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004000</span>  beq.n 30004008</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">411</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004002</span>  subs r2, r2, r1</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">412</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004004</span>  cmp r2, #0</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">413</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004006</span>  bgt.n 3000404e</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">414</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004008</span>  mov r1, r3</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">415</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000400a</span>  ldr r2, [pc, #100]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">416</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000400c</span>  ldr r2, [r2, #28]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">417</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000400e</span>  cmp r3, r2</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">418</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004010</span>  beq.n 30004016</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">419</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004012</span>  ldr r3, [r3, #0]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">420</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30004014</span>  cbnz r3, 3000405a</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">421</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000405a</span>  cmp r1, #0</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">422</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">3000405c</span>  bne.n 30003ff4</td><td class="c"></td></tr>
+<tr class="sec"><td colspan="3">wake 3, pass 3 &mdash; terminal pass &mdash; insert before &nbsp;|&nbsp; &mdash;</td></tr>
+<tr class="diff"><td class="rn">423</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30003ff4</span>  cbz r3, 30004016</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">424</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30003ff6</span>  ldrsb.w r1, [r0, #14]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">425</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30003ffa</span>  ldrsb.w r2, [r3, #14]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">426</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30003ffe</span>  cmp r1, r2</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">427</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004000</span>  beq.n 30004008</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">428</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004002</span>  subs r2, r2, r1</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">429</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004004</span>  cmp r2, #0</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">430</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004006</span>  bgt.n 3000404e</td><td class="c"></td></tr>
+<tr class="sec"><td colspan="3">wake 3, pass 3 &mdash; insert-before body &nbsp;|&nbsp; &mdash;</td></tr>
+<tr class="diff"><td class="rn">431</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">3000404e</span>  ldr r2, [r3, #4]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">432</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004050</span>  str r2, [r0, #4]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">433</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004052</span>  str r3, [r0, #0]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">434</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004054</span>  str r0, [r2, #0]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">435</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004056</span>  str r0, [r3, #4]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">436</td><td class="c win tins"><span class="alias">ready</span> <span class="addr">30004058</span>  b.n 30004026</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">437</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004026</span>  ldr r2, [pc, #72]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">438</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004028</span>  ldr.w r3, [r2, #24]!</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">439</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000402c</span>  cmp r3, r2</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">440</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000402e</span>  beq.n 30004064</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">441</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004030</span>  cbz r3, 30004064</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">442</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004032</span>  ldr r2, [pc, #60]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">443</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004034</span>  ldr r2, [r2, #8]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">444</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004036</span>  ldrb r1, [r2, #16]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">445</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004038</span>  tst.w r1, #31</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">446</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000403c</span>  bne.n 30004048</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">447</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000403e</span>  ldrh r1, [r2, #14]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">448</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004040</span>  cmp r1, #127</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">449</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004042</span>  bls.n 30004048</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">450</td><td class="c win"><span class="alias">ready</span> <span class="addr">30004048</span>  ldr r2, [pc, #36]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">451</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000404a</span>  str r3, [r2, #20]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">452</td><td class="c win"><span class="alias">ready</span> <span class="addr">3000404c</span>  bx lr</td><td class="c"></td></tr>
+<tr class="ctx"><td colspan="3">z_sched_wake_thread_locked</td></tr>
+<tr class="diff"><td class="rn">453</td><td class="c win"><span class="alias">wake</span> <span class="addr">30005ec8</span>  pop {r3, pc}</td><td class="c"></td></tr>
+<tr class="ctx"><td colspan="3">event_walk_op</td></tr>
+<tr class="diff"><td class="rn">454</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060d6</span>  movs r0, #0</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">455</td><td class="c win"><span class="alias">walk_op</span> <span class="addr">300060d8</span>  pop {r4, r5, r6, pc}</td><td class="c"></td></tr>
+<tr class="ctx"><td colspan="3">z_sched_waitq_walk</td></tr>
+<tr class="diff"><td class="rn">456</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f44</span>  mov r6, r0</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">457</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f46</span>  cbnz r0, 30005f66</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">458</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f48</span>  cmp r4, #0</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">459</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f4a</span>  beq.n 30005f38</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">460</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f38</span>  mov r3, r4</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">461</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f3a</span>  mov r0, r4</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">462</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f3c</span>  mov r4, r3</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">463</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f3e</span>  cbz r0, 30005f66</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">464</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f66</span>  cmp.w r9, #0</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">465</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f6a</span>  beq.n 30005f72</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">466</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f72</span>  msr BASEPRI, sl</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">467</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f76</span>  isb sy</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">468</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f7a</span>  movs r3, #1</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">469</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f7c</span>  cbnz r3, 30005fa4</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">470</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005fa4</span>  mov r0, r6</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">471</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005fa6</span>  ldmia.w sp!, {r4, r5, r6, r7, r8, r9, sl, pc}</td><td class="c"></td></tr>
+<tr class="ctx"><td colspan="3">k_event_post_internal</td></tr>
+<tr class="diff"><td class="rn">472</td><td class="c win"><span class="alias">post</span> <span class="addr">30004896</span>  ldr r3, [sp, #0]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">473</td><td class="c win"><span class="alias">post</span> <span class="addr">30004898</span>  ldr r2, [sp, #4]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">474</td><td class="c win"><span class="alias">post</span> <span class="addr">3000489a</span>  bic.w r3, r3, r2</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">475</td><td class="c win"><span class="alias">post</span> <span class="addr">3000489e</span>  str r3, [r4, #8]</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">476</td><td class="c win"><span class="alias">post</span> <span class="addr">300048a0</span>  mov r1, r6</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">477</td><td class="c win"><span class="alias">post</span> <span class="addr">300048a2</span>  add.w r0, r4, #12</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">478</td><td class="c win"><span class="alias">post</span> <span class="addr">300048a6</span>  bl 30005ef8</td><td class="c"></td></tr>
+<tr class="ctx"><td colspan="3">z_reschedule</td></tr>
+<tr class="diff"><td class="rn">479</td><td class="c win"><span class="alias">resched</span> <span class="addr">30005ef8</span>  push {r3, lr}</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">480</td><td class="c win"><span class="alias">resched</span> <span class="addr">30005efa</span>  bl 30004074</td><td class="c"></td></tr>
+<tr class="ctx"><td colspan="3">reschedule</td></tr>
+<tr class="diff"><td class="rn">481</td><td class="c win"><span class="alias">resched</span> <span class="addr">30004074</span>  mov r0, r1</td><td class="c"></td></tr>
+<tr class="diff"><td class="rn">482</td><td class="c win"><span class="alias">resched</span> <span class="addr">30004076</span>  cbnz r1, 3000409a</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f66</span>  cmp.w r9, #0</td></tr>
+<tr class="diff"><td class="rn">483</td><td class="c win"><span class="alias">resched</span> <span class="addr">30004078</span>  push {r3, lr}</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f6a</span>  beq.n 30005f72</td></tr>
+<tr class="diff"><td class="rn">484</td><td class="c win"><span class="alias">resched</span> <span class="addr">3000407a</span>  mrs r3, IPSR</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f72</span>  msr BASEPRI, sl</td></tr>
+<tr class="diff"><td class="rn">485</td><td class="c win"><span class="alias">resched</span> <span class="addr">3000407e</span>  cbnz r3, 30004090</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f76</span>  isb sy</td></tr>
+<tr class="diff"><td class="rn">486</td><td class="c win"><span class="alias">resched</span> <span class="addr">30004080</span>  ldr r3, [pc, #32]</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f7a</span>  movs r3, #1</td></tr>
+<tr class="diff"><td class="rn">487</td><td class="c win"><span class="alias">resched</span> <span class="addr">30004082</span>  ldr r2, [r3, #20]</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005f7c</span>  cbnz r3, 30005fa4</td></tr>
+<tr class="diff"><td class="rn">488</td><td class="c win"><span class="alias">resched</span> <span class="addr">30004084</span>  ldr r3, [r3, #8]</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005fa4</span>  mov r0, r6</td></tr>
+<tr class="diff"><td class="rn">489</td><td class="c win"><span class="alias">resched</span> <span class="addr">30004086</span>  cmp r2, r3</td><td class="c win"><span class="alias">walk</span> <span class="addr">30005fa6</span>  ldmia.w sp!, {r4, r5, r6, r7, r8, r9, sl, pc}</td></tr>
+<tr class="ctx"><td colspan="3">k_event_post_internal</td></tr>
+<tr class="diff"><td class="rn">490</td><td class="c win"><span class="alias">resched</span> <span class="addr">30004088</span>  beq.n 30004090</td><td class="c win"><span class="alias">post</span> <span class="addr">30004896</span>  ldr r3, [sp, #0]</td></tr>
+<tr class="diff"><td class="rn">491</td><td class="c win"><span class="alias">resched</span> <span class="addr">3000408a</span>  bl 30003fa0</td><td class="c win"><span class="alias">post</span> <span class="addr">30004898</span>  ldr r2, [sp, #4]</td></tr>
+<tr class="ctx"><td colspan="3">z_swap_irqlock</td></tr>
+<tr class="diff"><td class="rn">492</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fa0</span>  ldr r2, [pc, #40]</td><td class="c win"><span class="alias">post</span> <span class="addr">3000489a</span>  bic.w r3, r3, r2</td></tr>
+<tr class="diff"><td class="rn">493</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fa2</span>  ldr r3, [r2, #8]</td><td class="c win"><span class="alias">post</span> <span class="addr">3000489e</span>  str r3, [r4, #8]</td></tr>
+<tr class="diff"><td class="rn">494</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fa4</span>  str r0, [r3, #124]</td><td class="c win"><span class="alias">post</span> <span class="addr">300048a0</span>  mov r1, r6</td></tr>
+<tr class="diff"><td class="rn">495</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fa6</span>  mvn.w r1, #10</td><td class="c win"><span class="alias">post</span> <span class="addr">300048a2</span>  add.w r0, r4, #12</td></tr>
+<tr class="diff"><td class="rn">496</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003faa</span>  str.w r1, [r3, #128]</td><td class="c win"><span class="alias">post</span> <span class="addr">300048a6</span>  bl 30005ef8</td></tr>
+<tr class="ctx"><td colspan="3">z_reschedule</td></tr>
+<tr class="diff"><td class="rn">497</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fae</span>  ldr r1, [pc, #32]</td><td class="c win"><span class="alias">resched</span> <span class="addr">30005ef8</span>  push {r3, lr}</td></tr>
+<tr class="diff"><td class="rn">498</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fb0</span>  ldr r3, [r1, #4]</td><td class="c win"><span class="alias">resched</span> <span class="addr">30005efa</span>  bl 30004074</td></tr>
+<tr class="ctx"><td colspan="3">reschedule</td></tr>
+<tr class="diff"><td class="rn">499</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fb2</span>  orr.w r3, r3, #268435456</td><td class="c win"><span class="alias">resched</span> <span class="addr">30004074</span>  mov r0, r1</td></tr>
+<tr class="diff"><td class="rn">500</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fb6</span>  str r3, [r1, #4]</td><td class="c win"><span class="alias">resched</span> <span class="addr">30004076</span>  cbnz r1, 3000409a</td></tr>
+<tr class="diff"><td class="rn">501</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fb8</span>  movs r3, #0</td><td class="c win"><span class="alias">resched</span> <span class="addr">30004078</span>  push {r3, lr}</td></tr>
+<tr class="diff"><td class="rn">502</td><td class="c win"><span class="badge isr">PendSV FIRES</span><span class="alias">swap</span> <span class="addr">30003fba</span>  msr BASEPRI, r3</td><td class="c win"><span class="alias">resched</span> <span class="addr">3000407a</span>  mrs r3, IPSR</td></tr>
+<tr class="diff"><td class="rn">503</td><td class="c win"><span class="badge isr">PendSV RETURN</span><span class="alias">swap</span> <span class="addr">30003fbe</span>  isb sy</td><td class="c win"><span class="alias">resched</span> <span class="addr">3000407e</span>  cbnz r3, 30004090</td></tr>
+<tr class="diff"><td class="rn">504</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fc2</span>  ldr r3, [r2, #8]</td><td class="c win"><span class="alias">resched</span> <span class="addr">30004080</span>  ldr r3, [pc, #32]</td></tr>
+<tr class="diff"><td class="rn">505</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fc4</span>  ldr.w r0, [r3, #128]</td><td class="c win"><span class="alias">resched</span> <span class="addr">30004082</span>  ldr r2, [r3, #20]</td></tr>
+<tr class="diff"><td class="rn">506</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003fc8</span>  bx lr</td><td class="c win"><span class="alias">resched</span> <span class="addr">30004084</span>  ldr r3, [r3, #8]</td></tr>
+<tr class="ctx"><td colspan="3">z_pend_curr</td></tr>
+<tr class="diff"><td class="rn">507</td><td class="c win"><span class="alias">z_pend_curr</span> <span class="addr">300043e2</span>  pop {r4, pc}</td><td class="c win"><span class="alias">resched</span> <span class="addr">30004086</span>  cmp r2, r3</td></tr>
+<tr class="ctx"><td colspan="3">k_event_wait_internal</td></tr>
+<tr class="diff"><td class="rn">508</td><td class="c win"><span class="alias">k_event_wait</span> <span class="addr">3000616e</span>  cbnz r0, 30006174</td><td class="c win"><span class="alias">resched</span> <span class="addr">30004088</span>  beq.n 30004090</td></tr>
+<tr class="diff"><td class="rn">509</td><td class="c win"><span class="alias">k_event_wait</span> <span class="addr">30006170</span>  ldr r6, [r6, #96]</td><td class="c win"><span class="alias">resched</span> <span class="addr">30004090</span>  msr BASEPRI, r0</td></tr>
+<tr class="diff"><td class="rn">510</td><td class="c win"><span class="alias">k_event_wait</span> <span class="addr">30006172</span>  b.n 300060ea</td><td class="c win"><span class="alias">resched</span> <span class="addr">30004094</span>  isb sy</td></tr>
+<tr class="diff"><td class="rn">511</td><td class="c win"><span class="alias">k_event_wait</span> <span class="addr">300060ea</span>  mov r0, r6</td><td class="c win"><span class="alias">resched</span> <span class="addr">30004098</span>  pop {r3, pc}</td></tr>
+<tr class="ctx"><td colspan="3">z_reschedule</td></tr>
+<tr class="diff"><td class="rn">512</td><td class="c win"><span class="alias">k_event_wait</span> <span class="addr">300060ec</span>  add sp, #20</td><td class="c win"><span class="alias">resched</span> <span class="addr">30005efe</span>  pop {r3, pc}</td></tr>
+<tr class="ctx"><td colspan="3">k_event_post_internal</td></tr>
+<tr class="diff"><td class="rn">513</td><td class="c win"><span class="alias">k_event_wait</span> <span class="addr">300060ee</span>  ldmia.w sp!, {r4, r5, r6, r7, r8, r9, sl, fp, pc}</td><td class="c win"><span class="alias">post</span> <span class="addr">300048aa</span>  mov r0, r5</td></tr>
+<tr class="ctx"><td colspan="3">z_impl_k_event_wait_safe</td></tr>
+<tr class="diff"><td class="rn">514</td><td class="c win"><span class="alias">z_impl_k_eve</span> <span class="addr">300061a0</span>  add sp, #8</td><td class="c win"><span class="alias">post</span> <span class="addr">300048ac</span>  add sp, #8</td></tr>
+<tr class="diff"><td class="rn">515</td><td class="c win"><span class="alias">z_impl_k_eve</span> <span class="addr">300061a2</span>  pop {r4, pc}</td><td class="c win"><span class="alias">post</span> <span class="addr">300048ae</span>  pop {r4, r5, r6, pc}</td></tr>
+<tr class="ctx"><td colspan="3">H_Task_SA &nbsp;|&nbsp; z_impl_k_event_post</td></tr>
+<tr class="diff"><td class="rn">516</td><td class="c win"><span class="alias">H_Task_SA</span> <span class="addr">300012b6</span>  ldr r3, [pc, #36]</td><td class="c win"><span class="alias">k_post</span> <span class="addr">3000618a</span>  pop {r3, pc}</td></tr>
+<tr class="ctx"><td colspan="3">H_Task_SB</td></tr>
+<tr class="diff"><td class="rn">517</td><td class="c win"><span class="badge">STOP</span><span class="alias">H_Task_SA</span> <span class="addr">300012b8</span>  ldr r2, [r3, #4]</td><td class="c win"><span class="badge">STOP</span><span class="alias">H_Task_SB</span> <span class="addr">300011da</span>  ldr r2, [r4, #4]</td></tr>
+<tr class="diff"><td class="rn">518</td><td class="c"><span class="alias">H_Task_SA</span> <span class="addr">300012ba</span>  ldr r3, [pc, #36]</td><td class="c"><span class="alias">H_Task_SB</span> <span class="addr">300011dc</span>  ldr r3, [pc, #36]</td></tr>
+<tr class="diff"><td class="rn">519</td><td class="c"><span class="alias">H_Task_SA</span> <span class="addr">300012bc</span>  str r2, [r3, #0]</td><td class="c"><span class="alias">H_Task_SB</span> <span class="addr">300011de</span>  str r2, [r3, #0]</td></tr>
+</tbody></table></div>
+<div class="prov"><h3>Build configuration</h3><dl>
+<dt>Compiler</dt><dd><code>arm-none-eabi-gcc 14.2.1</code>, <code>-Og</code>, <code>-mcpu=cortex-m33 -mthumb -mabi=aapcs</code>, <code>CONFIG_XIP=n</code></dd>
+<dt>Kernel</dt><dd><code>CONFIG_SCHED_SIMPLE=y</code>, <code>CONFIG_WAITQ_SIMPLE=y</code>, <code>CONFIG_SMP=n</code>, <code>CONFIG_USE_SWITCH=n</code>, <code>CONFIG_TIMESLICING=n</code>, <code>CONFIG_EVENTS=y</code></dd>
+<dt>Extraction</dt><dd><code>objdump -d --no-show-raw-insn</code> of the linked <code>zephyr.elf</code>. Every row checked against it; every step a legal CFG successor; each fold resolves to exactly one path of the stated length.</dd>
+<dt>Alignment</dt><dd>Sequence diff over (code section, function offset). START and STOP rows anchored.</dd>
+<dt>Cost</dt><dd>Instruction counts only.</dd>
+</dl></div>
+</main>

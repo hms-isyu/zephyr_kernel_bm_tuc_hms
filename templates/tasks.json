@@ -1,0 +1,24 @@
+{
+  "version": "2.0.0",
+  "tasks": [{
+    "label": "linkserver",
+    "type": "shell",
+    "command": "<ZEPHYR_SDK_PATH>/.venv/Scripts/west.exe",
+    "args": ["debugserver"],
+    "options": {
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "ZEPHYR_BASE": "<ZEPHYR_SDK_PATH>/zephyr"
+      }
+    },
+    "isBackground": true,
+    "problemMatcher": {
+      "pattern": { "regexp": "." },
+      "background": {
+        "activeOnStart": true,
+        "beginsPattern": ".",
+        "endsPattern": "GDB server listening|listening on port|port 3333|Semihost server"
+      }
+    }
+  }]
+}

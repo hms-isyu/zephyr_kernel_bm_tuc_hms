@@ -1,26 +1,26 @@
-# SPDX-License-Identifier: Apache-2.0
 #
-# T2-topology manifest: this app repo is its own manifest repo.
-# Bring-up (from inside this directory):
-#   west init -l .
-#   west update --path-cache C:/Users/isyu/Work/ThirdParty/zephyrproject
-#   west build -b frdm_mcxn947/mcxn947/cpu0 .
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026 HMS Industrial Networks GmbH & Co. KG
+# Author: Isaac L. L. Yuki
 #
-# --path-cache seeds the clone from the existing on-disk zephyr checkout
-# (a folder named "zephyr" under the given parent) so no download happens.
-# The revision below MUST match what that cache has checked out, or west
-# will fetch the missing ref from the remote anyway.
 
 manifest:
   remotes:
     - name: zephyrproject-rtos
       url-base: https://github.com/zephyrproject-rtos
+    - name: benchmark_hms
+      url-base: https://github.com/hms-isyu/benchmark_test_hms.git
 
   projects:
     - name: zephyr
       remote: zephyrproject-rtos
-      revision: v4.4.1        # matches on-disk cache at ThirdParty/zephyrproject/zephyr
+      revision: v4.4.1 # matches on-disk cache at ThirdParty/zephyrproject/zephyr
       import: true
+      path: zephyr
+    - name: benchmark_hms
+      remote: benchmark_hms
+      revision: main
+      path: zephyr_benchmark/packages/benchmark_hms
 
   self:
     path: zephyr_benchmark
