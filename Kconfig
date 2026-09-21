@@ -278,6 +278,97 @@ config BENCHMARK_TEST_IPC_PIPE_SYNC
       T2 is therefore an upper bound on the transfer, and is not
       comparable to the k_mbox T2 window; T1 is.
 
+config BENCHMARK_TEST_MEM_SYS_HEAP
+    bool "Allocation via sys_heap"
+    help
+      timing/mem/sys_heap/sys_heap.c
+
+      The allocation algorithm with no kernel layer over it: no lock,
+      no wait queue, no timeout argument. This is the baseline the
+      k_heap and k_malloc numbers are differenced against.
+
+      All five allocation tests run the same workloads, W1 to W7_C,
+      out of timing/mem/mem_harness.c, against an arena that has to
+      serve 1024 bytes. The adapter is the only file that knows which
+      allocator is under test. Allocation failure costs are not
+      covered.
+
+config BENCHMARK_TEST_MEM_K_HEAP
+    bool "Allocation via k_heap"
+    help
+      timing/mem/k_heap/k_heap.c
+
+      The same algorithm with the kernel object around it. The arena
+      declaration is character for character the sys_heap one -
+      k_heap_init() rather than K_HEAP_DEFINE(), so same size, same
+      alignment, same section - and the delta against sys_heap is
+      therefore the spinlock and the wait queue and nothing else.
+
+      K_NO_WAIT throughout: the workload defines full as a NULL return,
+      so the blocking path is not covered.
+
+config BENCHMARK_TEST_MEM_K_MALLOC
+    bool "Allocation via k_malloc"
+    help
+      timing/mem/k_malloc/k_malloc.c
+
+      Needs CONFIG_HEAP_MEM_POOL_SIZE set to 1024; the Kconfig default
+      of 0 compiles k_malloc out entirely, and the adapter carries a
+      BUILD_ASSERT for it.
+
+      Not a layer over k_heap on the allocating side: z_alloc_helper()
+      in kernel/mempool.c takes the spinlock itself and calls
+      sys_heap_noalign_alloc() directly, so k_malloc and k_heap_alloc
+      are siblings over one algorithm rather than a stack. k_free does
+      go through k_heap_free(). The alloc delta against k_heap is a
+      difference of two wrappers; on free it is a layer.
+
+      k_malloc also stores a heap back-pointer below every allocation,
+      which makes it the one allocator expected to refuse the top of
+      the sweep: W1 records a NULL at s = 10 where the others are
+      served.
+
+config BENCHMARK_TEST_MEM_SLAB
+    bool "Allocation via k_mem_slab"
+    help
+      timing/mem/mem_slab/mem_slab.c
+
+      Fixed-size pieces. A fixed-size allocator has no request size
+      axis of its own, so the step of the sweep is the granularity the
+      arena is cut at: one slab re-initialized over one buffer at each
+      of the eight steps, 8 to 1024 bytes a piece.
+
+      k_mem_slab_alloc() pops a list threaded through the free pieces
+      themselves, so W1, W2, W4 and W5 are expected flat where the
+      heaps are not, and there is no fit policy to check - layout L
+      asks for four request sizes and an arena cut at one of them
+      cannot serve the others, so all three W7 runs record
+      SETUP_FAILED. k_mem_slab_init() is the arena creation, and it
+      writes one link per piece, so W6 is expected to halve at every
+      step of its granularity sweep where a heap is flat.
+
+config BENCHMARK_TEST_MEM_BLOCKS
+    bool "Allocation via sys_mem_blocks"
+    help
+      timing/mem/mem_blocks/mem_blocks.c
+
+      Fixed-size pieces again, but over a bitmap rather than a list,
+      and without a kernel object - there is no wait queue and no
+      runtime init, so the adapter declares one pool per step and
+      switches between them over a shared buffer. That list is the one
+      place in timing/mem that is written out rather than derived from
+      MEM_S_MIN.
+
+      sys_bitarray_alloc() scans 32-bit bundles from bit zero until one
+      is not all ones, which makes this the one fixed-size allocator
+      whose allocation is not constant time: the cost answers to the
+      number of leading allocated pieces. That is what W3 puts one
+      window over.
+
+      It also has no arena creation of its own - the pools are laid out
+      at compile time - so the adapter clears the bitmap instead and
+      W6 is flagged as not native.
+
 endchoice
 
 source "Kconfig.zephyr"

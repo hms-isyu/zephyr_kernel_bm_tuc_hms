@@ -96,6 +96,47 @@ target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_IPC_MAILBOX_SYNC app PRIV
 target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_IPC_PIPE_SYNC app PRIVATE
                            timing/ipc/pipe)
 
+# The allocation tests. One adapter per allocator, plus the portable workload
+# in mem_harness.c and the one Zephyr-aware file they share. The adapter is the
+# only file that knows which allocator is under test.
+target_sources_ifdef(CONFIG_BENCHMARK_TEST_MEM_SYS_HEAP app PRIVATE
+                     timing/mem/sys_heap/sys_heap.c
+                     timing/mem/mem_harness.c
+                     timing/mem/mem_zephyr_main.c)
+
+target_sources_ifdef(CONFIG_BENCHMARK_TEST_MEM_K_HEAP app PRIVATE
+                     timing/mem/k_heap/k_heap.c
+                     timing/mem/mem_harness.c
+                     timing/mem/mem_zephyr_main.c)
+
+target_sources_ifdef(CONFIG_BENCHMARK_TEST_MEM_K_MALLOC app PRIVATE
+                     timing/mem/k_malloc/k_malloc.c
+                     timing/mem/mem_harness.c
+                     timing/mem/mem_zephyr_main.c)
+
+target_sources_ifdef(CONFIG_BENCHMARK_TEST_MEM_SLAB app PRIVATE
+                     timing/mem/mem_slab/mem_slab.c
+                     timing/mem/mem_harness.c
+                     timing/mem/mem_zephyr_main.c)
+
+target_sources_ifdef(CONFIG_BENCHMARK_TEST_MEM_BLOCKS app PRIVATE
+                     timing/mem/mem_blocks/mem_blocks.c
+                     timing/mem/mem_harness.c
+                     timing/mem/mem_zephyr_main.c)
+
+# mem_allocator.h and mem_harness.h are shared by all five: one workload, one
+# measurement window, so the numbers compare.
+target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_MEM_SYS_HEAP app PRIVATE
+                                timing/mem)
+target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_MEM_K_HEAP app PRIVATE
+                                timing/mem)
+target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_MEM_K_MALLOC app PRIVATE
+                                timing/mem)
+target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_MEM_SLAB app PRIVATE
+                                timing/mem)
+target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_MEM_BLOCKS app PRIVATE
+                                timing/mem)
+
 # HMS benchmark package
 set(benchmark_path ${CMAKE_CURRENT_SOURCE_DIR}/packages/benchmark_hms)
 include(${benchmark_path}/CMakeLists.txt)
