@@ -37,10 +37,14 @@
  ******************************************************************************/
 
 /* The define takes ilog2 of the piece size. */
-BUILD_ASSERT((MEM_ARENA_SIZE & (MEM_ARENA_SIZE - 1U)) == 0U,
+BUILD_ASSERT((MEM_ARENA_BYTES & (MEM_ARENA_BYTES - 1U)) == 0U,
              "the arena must be a power of two");
 
-#define MB_BLOCKS_AT(s_) (MEM_ARENA_SIZE / (1U << (s_)))
+/* The pieces the whole headroom arena cuts into at a step, not the N(s) the
+ * usable memory budget pays for: R5 hands the allocator all of what the
+ * adapter declares, and the fill stops on its count rather than on the pool
+ * running out. */
+#define MB_BLOCKS_AT(s_) (MEM_ARENA_BYTES / (1U << (s_)))
 
 /*
  * Which pool a granularity picks, as one count-trailing-zeros rather than a
@@ -54,10 +58,10 @@ BUILD_ASSERT((MEM_ARENA_SIZE & (MEM_ARENA_SIZE - 1U)) == 0U,
  * Variables
  ******************************************************************************/
 
-/* MEM_ARENA_SIZE exactly. The bitmap is beside the buffer rather than inside
- * it, so the capacity the comparison is made at and the array that provides it
- * are the same number here, as they are for the slab. */
-static uint8_t arena[MEM_ARENA_SIZE] __noinit __aligned(8);
+/* The headroom arena: MEM_ARENA_BYTES, the same storage every adapter in the
+ * comparison declares. The bitmap is beside the buffer rather than inside it,
+ * so all of the array is available to pieces, as it is for the slab. */
+static uint8_t arena[MEM_ARENA_BYTES] __noinit __aligned(8);
 
 /* One pool per step of the sweep, 2^MEM_S_MIN to 2^MEM_S_MAX bytes a piece. */
 SYS_MEM_BLOCKS_DEFINE_STATIC_WITH_EXT_BUF(pool_s3, 8, MB_BLOCKS_AT(3), arena);
@@ -165,4 +169,67 @@ void mem_allocator_free(void *allocation)
 bool mem_allocator_create_is_native(void)
 {
   return false;
+}
+
+/*
+ * The real arena, read out of the pool's own state: the pieces it holds times
+ * the size it cuts them at. blk_sz_shift is the ilog2 of the piece size, so
+ * the shift reconstructs the size the pool was configured with rather than the
+ * one this adapter passed in.
+ *
+ * Never measured. Read only outside a window.
+ */
+size_t mem_allocator_arena_bytes(void)
+{
+  return (size_t) test_live->info.num_blocks
+         << test_live->info.blk_sz_shift;
+}
+
+/*
+ * The total used space: the pieces in use times the piece size, per R22.
+ *
+ * used_blocks in struct sys_mem_blocks_info, mem_blocks.h:89, sits behind
+ * CONFIG_SYS_MEM_BLOCKS_RUNTIME_STATS, which R17 forbids enabling: it would
+ * add counter maintenance to the allocate and the free path, the paths W1
+ * through W5 measure. The count is therefore taken from the bitmap instead,
+ * through sys_bitarray_popcount_region(), bitarray.h:223, which is ungated and
+ * touches nothing at allocate or free time. num_blocks and blk_sz_shift,
+ * mem_blocks.h:86 and :87, are ungated too.
+ *
+ * A pool charges no per piece header, so this is the payload and the cost at
+ * once, as it is for the slab.
+ *
+ * Never measured. Read only outside a window, after the fill. The popcount
+ * walks the bitmap, which is exactly why it may not sit inside one.
+ */
+size_t mem_allocator_used_bytes(void)
+{
+  size_t count = 0U;
+
+  if (sys_bitarray_popcount_region(test_live->bitmap,
+                                   (size_t) test_live->info.num_blocks, 0U,
+                                   &count) != 0)
+  {
+    return 0U;
+  }
+
+  return count << test_live->info.blk_sz_shift;
+}
+
+/*
+ * The fixed arena cost: what the pool spends on having an arena at all.
+ *
+ * A pool writes nothing into the buffer, it tracks occupancy in a bitmap
+ * beside it, so its bookkeeping is that bitmap plus the pool object. The
+ * bitmap is num_bundles bundles of uint32_t, both fields of struct
+ * sys_bitarray, bitarray.h:34 to 40, and neither moves as pieces are handed
+ * out. That is the whole of what this allocator spends independent of the live
+ * allocations.
+ *
+ * Never measured. Read only outside a window.
+ */
+size_t mem_allocator_fixed_bytes(void)
+{
+  return sizeof(*test_live) + sizeof(sys_bitarray_t)
+         + ((size_t) test_live->bitmap->num_bundles * sizeof(uint32_t));
 }

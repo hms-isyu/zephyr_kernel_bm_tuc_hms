@@ -58,11 +58,11 @@ BUILD_ASSERT((MEM_SIZE_OF_S(MEM_S_MIN) % sizeof(void *)) == 0U,
 
 static struct k_mem_slab test_slab;
 
-/* MEM_ARENA_SIZE exactly. A slab keeps no header in front of a piece and no
- * table beside it, so the capacity the comparison is made at and the array
- * that provides it are the same number here, where the heap adapters have to
- * declare the larger array Z_HEAP_MIN_SIZE_FOR() gives them. */
-static uint8_t arena[MEM_ARENA_SIZE] __noinit __aligned(8);
+/* The headroom arena: MEM_ARENA_BYTES, the same storage every adapter in the
+ * comparison declares. A slab keeps no header in front of a piece and no table
+ * beside it, so all of it is available to pieces, and the step still cuts only
+ * the N(s) pieces the usable memory budget pays for. */
+static uint8_t arena[MEM_ARENA_BYTES] __noinit __aligned(8);
 
 /* What the arena is currently cut into. A request above it is one this
  * allocator cannot serve. */
@@ -151,4 +151,51 @@ void mem_allocator_free(void *allocation)
 bool mem_allocator_create_is_native(void)
 {
   return true;
+}
+
+/*
+ * The real arena, read out of the slab's own state: the pieces it was cut into
+ * times the size it cut them at. A slab keeps no header in front of a piece,
+ * so what it reports it holds is what it was given, up to the remainder the
+ * cut leaves at the end of the array.
+ *
+ * Never measured. Read only outside a window.
+ */
+size_t mem_allocator_arena_bytes(void)
+{
+  return (size_t) test_slab.info.num_blocks * test_slab.info.block_size;
+}
+
+/*
+ * The total used space: the pieces the slab reports in use times the piece
+ * size, per R22. num_used and block_size are both ungated fields of
+ * struct k_mem_slab_info, kernel.h:5797 to 5799; only max_used at kernel.h:5801
+ * sits behind a symbol, and it is not read here.
+ *
+ * A slab charges no per piece header, so this is the payload and the cost at
+ * once. That is the result, not a defect: it is what separates a fixed-size
+ * allocator from the three heaps in the space column.
+ *
+ * Never measured. Read only outside a window, after the fill.
+ */
+size_t mem_allocator_used_bytes(void)
+{
+  return (size_t) test_slab.info.num_used * test_slab.info.block_size;
+}
+
+/*
+ * The fixed arena cost: what the slab spends on having an arena at all.
+ *
+ * A slab threads its free list through the free pieces themselves, so it
+ * writes nothing into the arena that survives the pieces being handed out, and
+ * its bookkeeping is the k_mem_slab object beside the arena: the wait queue,
+ * the lock and the three counts. That object is the whole of the storage this
+ * allocator spends on having an arena, independent of how many pieces are
+ * live, so it is what is reported here.
+ *
+ * Never measured. Read only outside a window.
+ */
+size_t mem_allocator_fixed_bytes(void)
+{
+  return sizeof(test_slab);
 }

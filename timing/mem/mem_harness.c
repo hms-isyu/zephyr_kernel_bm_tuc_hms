@@ -164,21 +164,29 @@ static bool mem_has(uint32_t capability)
 }
 
 /*
- * Fills the arena and keeps nothing but the count, so that the loop inside
- * W3's window is one call, one compare and one increment per allocation and no
- * bookkeeping store. The only way back from here is creating the arena again,
- * which is why every caller is gated on MEM_CAPABILITY_CREATE.
+ * Allocates the usable memory budget and keeps nothing but the count, so that
+ * the loop inside W3's window is one call, one compare and one increment per
+ * allocation and no bookkeeping store. The only way back from here is creating
+ * the arena again, which is why every caller is gated on
+ * MEM_CAPABILITY_CREATE.
  *
- * The compare is the fail case: an allocator that never returns NULL would
- * otherwise hang the run. MEM_ALLOCATIONS_MAX is the capacity divided by the
- * smallest request, so a count above it cannot be true and mem_fill_bounded
- * goes false.
+ * The loop stops on its count, at N(s) = MEM_ARENA_SIZE / bytes successful
+ * allocations, and does not call allocate again: the arena is oversized by
+ * MEM_ARENA_HEADROOM, so what ends a fill is the usable memory budget being
+ * spent and not the allocator refusing. One division per fill, before the
+ * loop, the same fixed cost at every step and for every allocator.
+ *
+ * The NULL compare is the fail case: a step that stops short of N(s) met a
+ * refusal it was not supposed to meet, and the caller reads that off the
+ * count. MEM_ALLOCATIONS_MAX is N(MEM_S_MIN), so the count can never reach it
+ * from above and mem_fill_bounded stays the guard on the array bound.
  */
 static void mem_fill_blind(size_t bytes)
 {
-  uint32_t n = 0U;
+  const uint32_t limit = (uint32_t) (MEM_ARENA_SIZE / bytes);
+  uint32_t       n     = 0U;
 
-  while ((n <= MEM_ALLOCATIONS_MAX) && (mem_allocator_alloc(bytes) != NULL))
+  while ((n < limit) && (mem_allocator_alloc(bytes) != NULL))
   {
     n++;
   }
@@ -188,18 +196,30 @@ static void mem_fill_blind(size_t bytes)
 }
 
 /*
- * Fills the arena and keeps every allocation by index. Never inside a window.
- * Returns false when the allocator handed out more than the capacity can hold,
- * which is the same fail case mem_fill_blind() guards against.
+ * Allocates the usable memory budget and keeps every allocation by index.
+ * Never inside a window.
+ *
+ * Stops on the same count as mem_fill_blind(), at N(s) successful allocations,
+ * and does not call allocate again. A NULL before that leaves mem_held_count
+ * below N(s), which is what the caller checks; the return value stays what it
+ * was, false only when the allocator handed out more than the array can hold.
  */
 static bool mem_fill_held(size_t bytes)
 {
-  void *allocation;
+  const uint32_t limit = (uint32_t) (MEM_ARENA_SIZE / bytes);
+  void          *allocation;
 
   mem_held_count = 0U;
 
-  while ((allocation = mem_allocator_alloc(bytes)) != NULL)
+  while (mem_held_count < limit)
   {
+    allocation = mem_allocator_alloc(bytes);
+
+    if (allocation == NULL)
+    {
+      break;
+    }
+
     if (mem_held_count == MEM_ALLOCATIONS_MAX)
     {
       mem_allocator_free(allocation);
@@ -331,9 +351,10 @@ static void mem_probe_capabilities(void)
  * holding one free chunk and nothing else, which is the cheapest state there
  * is and therefore the floor the other allocation workloads are read against.
  *
- * Every step is run, including any the allocator refuses: a refusal at the top
- * of the sweep is the allocator's own per-allocation overhead read off the
- * sweep, and w1_served says which steps it was.
+ * Every step is run. On the headroom arena no step is expected to be refused:
+ * one allocation of 2^MEM_S_MAX out of MEM_ARENA_BYTES leaves the headroom
+ * untouched. A refusal here is therefore a fault of the harness setup, marked
+ * through MEM_FAILURE_ARENA_SIZE, and w1_served still says which steps it was.
  */
 static void mem_run_w1(void)
 {
@@ -350,14 +371,19 @@ static void mem_run_w1(void)
 
     MEM_MEASURE(&mem_w1_alloc[i], mem_allocation = mem_allocator_alloc(bytes));
 
-    mem_results.w1_status[i] = MEM_STATUS_OK;
     mem_results.w1_served[i] = (mem_allocation != NULL);
 
     if (mem_allocation != NULL)
     {
-      mem_results.s_served = s;
+      mem_results.w1_status[i] = MEM_STATUS_OK;
+      mem_results.s_served     = s;
       mem_allocator_free(mem_allocation);
       mem_allocation = NULL;
+    }
+    else
+    {
+      mem_results.w1_status[i] = MEM_STATUS_SETUP_FAILED;
+      mem_results.failures |= MEM_FAILURE_ARENA_SIZE;
     }
   }
 
@@ -375,8 +401,10 @@ static void mem_run_w1(void)
  * has them, which is what separates this row from W4 - no branch - and W5 -
  * both branches - at the same request size.
  *
- * A step whose setup allocation is refused has no free to measure and is
- * recorded N/A rather than skipped silently.
+ * A step whose setup allocation is refused has no free to measure. On the
+ * headroom arena that cannot be a property of the allocator, so it is recorded
+ * as a failed setup and sets MEM_FAILURE_ARENA_SIZE rather than being skipped
+ * silently.
  */
 static void mem_run_w2(void)
 {
@@ -392,7 +420,8 @@ static void mem_run_w2(void)
 
     if (mem_allocation == NULL)
     {
-      mem_results.w2_status[i] = MEM_STATUS_NOT_APPLICABLE;
+      mem_results.w2_status[i] = MEM_STATUS_SETUP_FAILED;
+      mem_results.failures |= MEM_FAILURE_ARENA_SIZE;
       continue;
     }
 
@@ -408,20 +437,40 @@ static void mem_run_w2(void)
 }
 
 /*
- * W3, time to fill the arena. One window over the whole loop, so the number is
- * the aggregate cost of every allocation the arena holds at that request size,
- * the refusal that ends the loop included. Divided by w3_allocations it is the
- * average allocation over a run that starts on an empty arena and finishes on
- * a full one, which is the quantity W1 cannot give: W1 only ever allocates out
- * of a pristine arena.
+ * W3, time to spend the usable memory budget. One window over the whole loop,
+ * so the number is the aggregate cost of the N(s) allocations the budget pays
+ * for at that request size. Divided by w3_allocations it is the average
+ * allocation over a run that starts on an empty arena and finishes on one
+ * holding the whole budget, which is the quantity W1 cannot give: W1 only ever
+ * allocates out of a pristine arena.
  *
- * Every step is run. At a step the allocator cannot serve, the loop makes one
- * call and stops, w3_allocations is zero and the number is that one refusal.
+ * No refusal is inside the number. The loop stops on its count, at N(s)
+ * successful allocations, so every step measures the same N(s) allocations on
+ * every allocator and the rows compare call for call.
  *
- * Inside the window: the loop's own compare and increment, and the two stores
- * mem_fill_blind() makes once it is over. Nothing else - it keeps no
- * bookkeeping, which is why the arena is emptied here by creating it again and
- * not by freeing.
+ * Inside the window: the loop's own compare and increment, one division before
+ * it, and the two stores mem_fill_blind() makes once it is over. Nothing else
+ * - it keeps no bookkeeping, which is why the arena is emptied here by
+ * creating it again and not by freeing.
+ *
+ * Every record this workload takes beyond its own number, the real arena, the
+ * total used space, the fixed arena cost and the count check, is taken here
+ * and nowhere else. W3 is the only workload the sizing of the arena can
+ * invalidate, it already creates once per step, and the count the check reads
+ * is one it already records. W6 also creates once per step, but its window has
+ * to stay the one call, so nothing is read around it. All three byte figures
+ * are read outside the window, two of them after it closes.
+ *
+ * The check is against N(s) = MEM_ARENA_SIZE / 2^s, the allocations a step
+ * makes, and it applies to every adapter. N(s) is the invariant of the whole
+ * directory; the fill loop now bounds itself by it, so what the check reads is
+ * whether the loop ran to the end, and a count below it means an allocation
+ * was refused on an arena sized so that none can be.
+ *
+ * A short count is recorded, marks the step and the mask, and the run carries
+ * on. A short step still measured a real fill of a real arena and dropping it
+ * would be dropping a data point: the measured value and the recorded count
+ * are what they would have been either way.
  */
 static void mem_run_w3(void)
 {
@@ -434,9 +483,23 @@ static void mem_run_w3(void)
     mem_allocator_create_arena(bytes);
     mem_allocator_clog();
 
+    /* What the allocator reports it was given for this step, read once, before
+     * the window opens. The subtraction against MEM_ARENA_SIZE is done off the
+     * target. */
+    mem_results.real_arena[i] = (uint32_t) mem_allocator_arena_bytes();
+
     MEM_MEASURE(&mem_w3_fill[i], mem_fill_blind(bytes));
 
+    /* The window is closed and the step's allocations are still live, which is
+     * the one moment the total used space can be read. The fixed arena cost
+     * does not move with them and is read beside it. */
+    mem_results.w3_used_bytes[i] = (uint32_t) mem_allocator_used_bytes();
+    mem_results.fixed_bytes[i]   = (uint32_t) mem_allocator_fixed_bytes();
+
     mem_results.w3_allocations[i] = mem_fill_count;
+
+    mem_results.w3_count_expected[i] =
+      (mem_fill_count == (uint32_t) (MEM_ARENA_SIZE >> s));
 
     if (mem_fill_bounded)
     {
@@ -448,9 +511,31 @@ static void mem_run_w3(void)
       mem_results.failures |= MEM_FAILURE_UNBOUNDED;
     }
 
+    /* A count below N(s) means an allocation was refused, which the headroom
+     * is there to make impossible. The step is marked, and the sample it took
+     * stays. */
+    if (!mem_results.w3_count_expected[i])
+    {
+      mem_results.w3_status[i] = MEM_STATUS_SETUP_FAILED;
+      mem_results.failures |= MEM_FAILURE_ARENA_SIZE;
+    }
+
     mem_allocator_destroy_arena();
     mem_allocator_create_arena(bytes);
     mem_allocator_clog();
+  }
+
+  /* The total used space column is readable only if the adapter answered at
+   * every step. One 0 anywhere takes the whole column out of the comparison,
+   * because a column with a hole in it is not a column. */
+  mem_results.capabilities |= MEM_CAPABILITY_USED_BYTES;
+
+  for (uint32_t i = 0U; i < MEM_S_COUNT; i++)
+  {
+    if (mem_results.w3_used_bytes[i] == 0U)
+    {
+      mem_results.capabilities &= ~(uint32_t) MEM_CAPABILITY_USED_BYTES;
+    }
   }
 
   mem_allocator_destroy_arena();
@@ -463,10 +548,11 @@ static void mem_run_w3(void)
  * ascending, with the last allocation excluded.
  *
  * Odd indices, so every freed allocation keeps a live one on each side and no
- * two holes are adjacent. The last allocation is excluded because the arena
- * does not usually divide evenly: whatever was left over when the fill stopped
- * is free and sits next to it, so freeing it would coalesce where none of the
- * others do and put one different sample in the middle of the series.
+ * two holes are adjacent. The last allocation is excluded because what the
+ * fill did not spend sits next to it: the arena is oversized by
+ * MEM_ARENA_HEADROOM, so free space past the last allocation is there at every
+ * step, and freeing it would coalesce where none of the others do and put one
+ * different sample in the middle of the series.
  *
  * Fewer than three allocations leaves no odd index below the last one, so
  * there is nothing to sweep. That is expected at the top of the range and is
@@ -522,6 +608,52 @@ static void mem_run_w4(void)
 
     mem_results.w4_allocations[j] = mem_held_count;
 
+    /* The span cross check, and the only place it can live. W3 fills through
+     * the blind path, which keeps no pointers by design, so that the loop
+     * inside its window holds one call, one compare and one increment; adding
+     * min and max tracking there would put arithmetic inside a measured loop.
+     * W4's setup fill is untimed and has just placed the same N(s)
+     * allocations of the same 2^s in mem_held[], so the span and the
+     * allocator's own figure can be taken here, on one live set, before the
+     * first free touches it.
+     *
+     * Disagreement beyond the tolerance means the two are not describing the
+     * same live set, which makes the total used space column unreadable. The
+     * span itself is a local: it is an instrument for this check, not a
+     * result, so it gets no field. */
+    if (mem_held_count > 0U)
+    {
+      uintptr_t low  = (uintptr_t) mem_held[0];
+      uintptr_t high = (uintptr_t) mem_held[0];
+
+      for (uint32_t k = 1U; k < mem_held_count; k++)
+      {
+        const uintptr_t p = (uintptr_t) mem_held[k];
+
+        if (p < low)
+        {
+          low = p;
+        }
+
+        if (p > high)
+        {
+          high = p;
+        }
+      }
+
+      {
+        const size_t span      = (size_t) (high - low) + bytes;
+        const size_t reported  = mem_allocator_used_bytes();
+        const size_t deviation = (span > reported) ? (span - reported)
+                                                   : (reported - span);
+
+        if (deviation > (size_t) (MEM_ARENA_SIZE / 8U))
+        {
+          mem_results.failures |= MEM_FAILURE_USED_BYTES;
+        }
+      }
+    }
+
     if (mem_sweep_odd(&mem_w4_free[j]))
     {
       mem_results.w4_holes[j]  = mem_w4_free[j].iteration_count;
@@ -530,6 +662,15 @@ static void mem_run_w4(void)
     else
     {
       mem_results.w4_status[j] = MEM_STATUS_SETUP_FAILED;
+    }
+
+    /* A fill short of N(s) met a refusal the headroom is there to make
+     * impossible, so the state the sweep ran on is not the state it was meant
+     * to run on. Marked, and the samples stay. */
+    if (mem_held_count != (uint32_t) (MEM_ARENA_SIZE >> s))
+    {
+      mem_results.w4_status[j] = MEM_STATUS_SETUP_FAILED;
+      mem_results.failures |= MEM_FAILURE_ARENA_SIZE;
     }
 
     mem_free_held();
@@ -595,6 +736,14 @@ static void mem_run_w5(void)
       mem_results.w5_status[j] = MEM_STATUS_SETUP_FAILED;
     }
 
+    /* As in W4: a fill short of N(s) is a refusal on an arena sized so that
+     * none can happen. Marked, and the samples stay. */
+    if (mem_results.w5_allocations[j] != (uint32_t) (MEM_ARENA_SIZE >> s))
+    {
+      mem_results.w5_status[j] = MEM_STATUS_SETUP_FAILED;
+      mem_results.failures |= MEM_FAILURE_ARENA_SIZE;
+    }
+
     mem_free_held();
     mem_allocator_destroy_arena();
     mem_allocator_create_arena(bytes);
@@ -615,8 +764,10 @@ static void mem_run_w5(void)
  * The granularity is the axis because that is what the work responds to. An
  * allocator that lays its arena out by writing one header and a table of size
  * classes is flat across the sweep; one that has to walk every piece of a
- * fixed-size arena is not, and the number of pieces is MEM_ARENA_SIZE divided
- * by the granularity, so its cost halves at every step. w6_native says whether
+ * fixed-size arena is not, and the number of pieces is MEM_ARENA_BYTES divided
+ * by the granularity, so its cost halves at every step. The arena is the same
+ * number of bytes at every step, so the granularity is the only thing this
+ * axis carries. w6_native says whether
  * what was measured is the allocator laying out its own arena or the adapter
  * standing in for one.
  */

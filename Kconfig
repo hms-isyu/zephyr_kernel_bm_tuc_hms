@@ -288,33 +288,40 @@ config BENCHMARK_TEST_MEM_SYS_HEAP
       k_heap and k_malloc numbers are differenced against.
 
       All five allocation tests run the same workloads, W1 to W7_C,
-      out of timing/mem/mem_harness.c, against an arena that has to
-      serve 1024 bytes. The adapter is the only file that knows which
-      allocator is under test. Allocation failure costs are not
-      covered.
+      out of timing/mem/mem_harness.c, against the headroom arena:
+      MEM_ARENA_BYTES, 4096 bytes, the same storage for every step and
+      every allocator, oversized by MEM_ARENA_HEADROOM so that no step
+      can run it out. Every step allocates the same usable memory
+      budget of 1024 bytes out of it. The adapter is the only file
+      that knows which allocator is under test. Allocation failure
+      costs are not covered.
 
 config BENCHMARK_TEST_MEM_K_HEAP
     bool "Allocation via k_heap"
     help
       timing/mem/k_heap/k_heap.c
 
-      The same algorithm with the kernel object around it. The arena
-      declaration is character for character the sys_heap one -
-      k_heap_init() rather than K_HEAP_DEFINE(), so same size, same
-      alignment, same section - and the delta against sys_heap is
-      therefore the spinlock and the wait queue and nothing else.
+      The same algorithm with the kernel object around it. The
+      headroom arena declaration is character for character the
+      sys_heap one, k_heap_init() rather than K_HEAP_DEFINE(), so same
+      MEM_ARENA_BYTES, same alignment, same section, and the delta
+      against sys_heap is therefore the spinlock and the wait queue
+      and nothing else.
 
-      K_NO_WAIT throughout: the workload defines full as a NULL return,
-      so the blocking path is not covered.
+      K_NO_WAIT throughout, so the blocking path is not covered. W3,
+      W4 and W5 stop on their count of allocations rather than on a
+      refusal, which the headroom arena is sized to make impossible.
 
 config BENCHMARK_TEST_MEM_K_MALLOC
     bool "Allocation via k_malloc"
     help
       timing/mem/k_malloc/k_malloc.c
 
-      Needs CONFIG_HEAP_MEM_POOL_SIZE set to 1024; the Kconfig default
-      of 0 compiles k_malloc out entirely, and the adapter carries a
-      BUILD_ASSERT for it.
+      Needs CONFIG_HEAP_MEM_POOL_SIZE set to 4096, the value of
+      MEM_ARENA_BYTES, so that k_malloc gets the same headroom arena
+      as the other four. The Kconfig default of 0 compiles k_malloc
+      out entirely, and the adapter carries a BUILD_ASSERT that the
+      symbol is at least MEM_ARENA_BYTES.
 
       Not a layer over k_heap on the allocating side: z_alloc_helper()
       in kernel/mempool.c takes the spinlock itself and calls
@@ -324,9 +331,9 @@ config BENCHMARK_TEST_MEM_K_MALLOC
       difference of two wrappers; on free it is a layer.
 
       k_malloc also stores a heap back-pointer below every allocation,
-      which makes it the one allocator expected to refuse the top of
-      the sweep: W1 records a NULL at s = 10 where the others are
-      served.
+      so it pays more per allocation than the other four. The headroom
+      arena absorbs that: every step is served, and the extra shows up
+      in the measured total used space rather than in a refusal.
 
 config BENCHMARK_TEST_MEM_SLAB
     bool "Allocation via k_mem_slab"
@@ -335,8 +342,9 @@ config BENCHMARK_TEST_MEM_SLAB
 
       Fixed-size pieces. A fixed-size allocator has no request size
       axis of its own, so the step of the sweep is the granularity the
-      arena is cut at: one slab re-initialized over one buffer at each
-      of the eight steps, 8 to 1024 bytes a piece.
+      arena is cut at: one slab re-initialized over the same headroom
+      arena of MEM_ARENA_BYTES at each of the eight steps, 8 to 1024
+      bytes a piece.
 
       k_mem_slab_alloc() pops a list threaded through the free pieces
       themselves, so W1, W2, W4 and W5 are expected flat where the
@@ -353,11 +361,11 @@ config BENCHMARK_TEST_MEM_BLOCKS
       timing/mem/mem_blocks/mem_blocks.c
 
       Fixed-size pieces again, but over a bitmap rather than a list,
-      and without a kernel object - there is no wait queue and no
+      and without a kernel object, there is no wait queue and no
       runtime init, so the adapter declares one pool per step and
-      switches between them over a shared buffer. That list is the one
-      place in timing/mem that is written out rather than derived from
-      MEM_S_MIN.
+      switches between them over one shared headroom arena of
+      MEM_ARENA_BYTES. That list is the one place in timing/mem that
+      is written out rather than derived from MEM_S_MIN.
 
       sys_bitarray_alloc() scans 32-bit bundles from bit zero until one
       is not all ones, which makes this the one fixed-size allocator

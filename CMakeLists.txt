@@ -137,6 +137,18 @@ target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_MEM_SLAB app PRIVATE
 target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_MEM_BLOCKS app PRIVATE
                                 timing/mem)
 
+# timing/mem/mem_zephyr_heap.h reads the heap's own chunk walk to report the
+# total used space and the fixed arena cost, which needs lib/heap/heap.h. That
+# header is private to the kernel and is not on the default include path. Only
+# the three heap cases include it; the slab and the blocks cases read their own
+# allocator's state and must not gain the path.
+target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_MEM_SYS_HEAP app PRIVATE
+                                ${ZEPHYR_BASE}/lib/heap)
+target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_MEM_K_HEAP app PRIVATE
+                                ${ZEPHYR_BASE}/lib/heap)
+target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_MEM_K_MALLOC app PRIVATE
+                                ${ZEPHYR_BASE}/lib/heap)
+
 # HMS benchmark package
 set(benchmark_path ${CMAKE_CURRENT_SOURCE_DIR}/packages/benchmark_hms)
 include(${benchmark_path}/CMakeLists.txt)

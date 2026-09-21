@@ -53,30 +53,76 @@
  *   W7_B  fit policy, order 2    one run            address only, no cycles
  *   W7_C  next-fit probe         one run            address only, no cycles
  *
+ * The W6 axis is the granularity alone. Every adapter declares an arena of
+ * MEM_ARENA_BYTES, the same number of bytes at every step and for every
+ * allocator, so what the step hands over does not move with the step, and the
+ * storage the adapters declare carries no per allocator difference. The real
+ * arena at each step, as the allocator reports it, is recorded in
+ * mem_results.real_arena.
+ *
  * Allocation failure costs are deliberately not covered.
  ******************************************************************************/
 
 /*
- * The step range, and the arena that follows from it.
+ * The step range, the usable memory budget, and the arena that follows from
+ * it.
  *
- * MEM_ARENA_SIZE is the capacity the comparison is made at: the bytes that
- * have to be servable, 2^MEM_S_MAX, so that the top of the sweep is a request
- * every allocator is expected to serve at least once. It is not the size of
- * any array. Headers, footers, bucket tables and whatever else an allocator
- * keeps sit on top of it, so each adapter declares whatever storage it takes
- * to provide this capacity and no adapter declares this number directly unless
- * its allocator has no overhead at all.
+ * MEM_ARENA_SIZE is the usable memory budget: the usable memory every step
+ * allocates, 2^MEM_S_MAX, the same number for every allocator and every step.
+ * Usable memory is memory occupied by application data, never a header, a
+ * footer, a bucket table or any other allocator bookkeeping. MEM_ARENA_SIZE is
+ * not the size of any array.
  *
- * Where an allocator still refuses the top of the sweep - k_malloc puts a heap
- * back-pointer below every allocation, so 2^MEM_S_MAX bytes of payload need
- * more than 2^MEM_S_MAX of capacity - that NULL is the result of the run and
- * not an error. W1 records it as one, and the workloads that need an
- * allocation in order to have anything to measure record N/A.
+ * MEM_ARENA_BYTES is the arena: the storage an adapter declares,
+ * MEM_ARENA_HEADROOM times the usable memory budget. The headroom keeps the
+ * bookkeeping off the budget, so no step can exhaust the arena and every step
+ * allocates its full N(s) = MEM_ARENA_SIZE / 2^s times. The arena is created
+ * once per step and is never sized per step, so it is the same number of bytes
+ * at every step and for every allocator.
+ *
+ * A step stops on its count, at N(s) successful allocations, and never on a
+ * NULL. A NULL from any allocation in W1 to W5 is therefore a fault of the
+ * harness setup rather than a result: it sets MEM_FAILURE_ARENA_SIZE and marks
+ * that step. W7 is the one exception, where a NULL is a fit policy
+ * classification.
+ *
+ * What the allocator reports it was given is the real arena, recorded per step
+ * in mem_results.real_arena. What it consumed to hold a step's live
+ * allocations is the total used space, in mem_results.w3_used_bytes, and what
+ * it spends on having an arena at all is the fixed arena cost, in
+ * mem_results.fixed_bytes. Every subtraction between the four is done off the
+ * target.
+ *
+ * No allocator in this directory is expected to refuse any step of the sweep.
+ * The heap back-pointer k_malloc puts below every allocation costs no chunk
+ * unit of its own, it lands in the slack the chunk header leaves in its own
+ * unit, so the three heaps are expected to report the same W1 served flags and
+ * the same W3 counts at every step; the arithmetic is in the file header of
+ * k_malloc.c.
  */
 #define MEM_S_MIN (3U)
 #define MEM_S_MAX (10U)
 #define MEM_S_COUNT (MEM_S_MAX - MEM_S_MIN + 1U)
 #define MEM_ARENA_SIZE (1U << MEM_S_MAX)
+
+/* Overridable from the build, so a headroom question can be answered without
+ * editing this header. */
+#ifndef MEM_ARENA_HEADROOM
+#define MEM_ARENA_HEADROOM (4U)
+#endif
+
+#define MEM_ARENA_BYTES (MEM_ARENA_HEADROOM * MEM_ARENA_SIZE)
+
+/*
+ * A headroom of 1 is the exhaustion design this arena replaces: the arena
+ * would be the usable memory budget itself, every allocator's bookkeeping
+ * would come out of the budget, and a step would run out before it had
+ * allocated N(s) times. Two is the smallest factor that leaves the bookkeeping
+ * somewhere else to go.
+ */
+_Static_assert(MEM_ARENA_HEADROOM >= 2,
+               "MEM_ARENA_HEADROOM below 2 puts allocator bookkeeping on the "
+               "usable memory budget");
 
 #define MEM_SIZE_OF_S(s_) ((size_t) (1U << (s_)))
 #define MEM_INDEX_OF_S(s_) ((uint32_t) ((s_) - MEM_S_MIN))
@@ -91,13 +137,12 @@
 #define MEM_S_SWEEP_COUNT (MEM_S_SWEEP_MAX - MEM_S_MIN + 1U)
 
 /*
- * Upper bounds on the filling loops. The capacity divided by the smallest
- * request is the most allocations any allocator can hand out of it - an
- * allocator with no overhead per allocation reaches it exactly and one with
- * overhead stays below - and half of those is the most holes an every-second
- * sweep can make. Both are hard limits in the loops as well as array sizes: an
- * allocator that never returns NULL is a fail case the harness has to survive
- * rather than hang on.
+ * Upper bounds on the filling loops. The usable memory budget divided by the
+ * smallest request is N(MEM_S_MIN), the most allocations any step hands out;
+ * and half of those is the most holes an every-second sweep can make. Both are
+ * array sizes and hard limits in the loops: the loops stop on N(s), which is
+ * never above MEM_ALLOCATIONS_MAX, and the bound stays as the guard against an
+ * allocator the harness would otherwise hang on.
  */
 #define MEM_ALLOCATIONS_MAX (MEM_ARENA_SIZE / MEM_SIZE_OF_S(MEM_S_MIN))
 #define MEM_HOLES_MAX (MEM_ALLOCATIONS_MAX / 2U)
@@ -227,7 +272,11 @@ typedef enum mem_capability_t
 {
   MEM_CAPABILITY_NONE    = 0U,
   MEM_CAPABILITY_CREATE  = (1U << 0), /* creating the arena empties it      */
-  MEM_CAPABILITY_RECLAIM = (1U << 1)  /* free() gives the bytes back        */
+  MEM_CAPABILITY_RECLAIM = (1U << 1), /* free() gives the bytes back        */
+  MEM_CAPABILITY_USED_BYTES = (1U << 2) /* mem_allocator_used_bytes() came
+                                         * back non zero at every step, so the
+                                         * total used space column is
+                                         * readable                           */
 } mem_capability_t;
 
 /* What one run of one workload at one step is worth. */
@@ -256,6 +305,11 @@ typedef enum mem_status_t
 #define MEM_FAILURE_NO_RECLAIM (1U << 1)
 #define MEM_FAILURE_NOTHING_SERVED (1U << 2)
 #define MEM_FAILURE_UNBOUNDED (1U << 3)
+#define MEM_FAILURE_ARENA_SIZE (1U << 4)
+/* The total used space the adapter reported and the span the harness measured
+ * over the same live set disagree by more than the tolerance, so one of the
+ * two is not describing that live set and the space column cannot be read. */
+#define MEM_FAILURE_USED_BYTES (1U << 5)
 
 /* One W7 run: an address and what gap it was, plus whether it happened. */
 typedef struct mem_w7_result_t
@@ -278,6 +332,26 @@ typedef struct mem_results_t
   uint32_t failures;     /* MEM_FAILURE_* bits, the return of _run()        */
   uint32_t s_served;     /* largest served step, MEM_S_MIN - 1 if none      */
 
+  /*
+   * The real arena in bytes at each step, as the adapter reports it after the
+   * creation that step was measured on. The same MEM_ARENA_BYTES goes in at
+   * every step, so what differs between two rows here is what the allocator
+   * charges for holding an arena of that size. Never a time.
+   */
+  uint32_t real_arena[MEM_S_COUNT];
+
+  /*
+   * Taken in W3, after the window closes. The total used space is the bytes
+   * the allocator consumed to hold that step's N(s) live allocations; the
+   * fixed arena cost is the bytes it spends on having an arena at all,
+   * independent of how many allocations are live. Both as the adapter reports
+   * them, both outside every window. Nothing is derived from either here: the
+   * subtractions against MEM_ARENA_SIZE and against each other are done off
+   * the target in the workbook. Never a time.
+   */
+  uint32_t w3_used_bytes[MEM_S_COUNT];
+  uint32_t fixed_bytes[MEM_S_COUNT];
+
   mem_status_t w1_status[MEM_S_COUNT];
   bool         w1_served[MEM_S_COUNT];
 
@@ -285,6 +359,7 @@ typedef struct mem_results_t
 
   mem_status_t w3_status[MEM_S_COUNT];
   uint32_t     w3_allocations[MEM_S_COUNT]; /* how many the arena held      */
+  bool         w3_count_expected[MEM_S_COUNT]; /* w3_allocations was N(s)   */
 
   mem_status_t w4_status[MEM_S_SWEEP_COUNT];
   uint32_t     w4_allocations[MEM_S_SWEEP_COUNT];
