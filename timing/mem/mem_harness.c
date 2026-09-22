@@ -922,6 +922,12 @@ static bool mem_w7_build(mem_w7_run_t run, void **chunk)
  */
 static void mem_run_w7(mem_w7_run_t run)
 {
+  if (mem_allocator_is_fixed_size())
+  {
+    mem_results.w7[run].status = MEM_STATUS_NOT_APPLICABLE;
+    return;
+  }
+
   void *chunk[MEM_COUNT_OF(mem_w7_layout)] = {NULL};
 
   if (!mem_w7_build(run, chunk))
