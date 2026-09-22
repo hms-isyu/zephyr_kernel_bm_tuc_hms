@@ -31,8 +31,7 @@
 void mem_allocator_create_arena(size_t granularity);
 
 /**
- * @brief Tears the arena down, restoring the allocator to its pre-creation
- * state.
+ * @brief Tears the arena down, restoring the allocator to its pre-creation state.
  *
  * @param None
  * @return None
@@ -40,8 +39,7 @@ void mem_allocator_create_arena(size_t granularity);
 void mem_allocator_destroy_arena(void);
 
 /**
- * @brief Restricts the backing store to the size of the arena to ensure refusal
- * at the arena's edge.
+ * @brief Trims the backing store down to the arena, so allocation refuses at the arena edge.
  *
  * @param None
  * @return None
@@ -65,8 +63,7 @@ void *mem_allocator_alloc(size_t bytes);
 void mem_allocator_free(void *allocation);
 
 /**
- * @brief Checks if mem_allocator_create_arena() is the allocator's native arena
- * creation function.
+ * @brief Checks if mem_allocator_create_arena() is the allocator's native arena creation function.
  *
  * @param None
  * @return true if native, false if an adapter stood in.
@@ -82,8 +79,7 @@ bool mem_allocator_create_is_native(void);
 size_t mem_allocator_arena_bytes(void);
 
 /**
- * @brief Gets the total used space in bytes, including usable memory and
- * bookkeeping.
+ * @brief Gets the total used space in bytes, including usable memory and bookkeeping.
  *
  * @param None
  * @return The total used space in bytes, or 0 if not tracked.
@@ -99,12 +95,10 @@ size_t mem_allocator_used_bytes(void);
 size_t mem_allocator_fixed_bytes(void);
 
 /**
- * @brief Checks if this allocator exclusively serves pieces of the granularity
- * it was cut at.
+ * @brief Checks if this allocator exclusively serves pieces of the granularity it was cut at.
  *
  * @param None
- * @return true if it is a fixed-size allocator, false if it carves the arena on
- * demand.
+ * @return true if it is a fixed-size allocator, false if it carves the arena on demand.
  */
 bool mem_allocator_is_fixed_size(void);
 
@@ -120,10 +114,8 @@ bool mem_allocator_supports_alloc_n(void);
  * @brief Allocates multiple pieces in one non-blocking call.
  *
  * @param[in] count How many pieces to allocate.
- * @param[out] allocations Array to be filled with pointers to the allocated
- * pieces on success.
- * @return true on success, false if the allocator refused or does not support
- * the call.
+ * @param[out] allocations Array filled with pointers to the allocated pieces on success.
+ * @return true on success, false if the allocator refused or does not support the call.
  */
 bool mem_allocator_alloc_n(size_t count, void **allocations);
 

@@ -7,17 +7,10 @@
  */
 /******************************************************************************/
 
-/*
- * Adapter: Zephyr k_heap.
- *
- * The same algorithm as the sys_heap adapter with the kernel object around it.
- * The arena declaration below is character for character the sys_heap one, so
- * the delta between the two tests is the spinlock and the wait queue and
- * nothing else.
- *
- * K_NO_WAIT throughout: the workload defines full as a NULL return and an
- * allocation that blocks is not one the harness can time. The blocking path of
- * k_heap_alloc() is not covered here.
+/*!
+ * \file
+ * \brief Allocator adapter for Zephyr k_heap. Allocates with K_NO_WAIT
+ *        throughout; the blocking path of k_heap_alloc() is not covered.
  */
 
 #include <zephyr/kernel.h>
@@ -33,30 +26,16 @@
 
 static struct k_heap test_heap;
 
-/* k_heap_init() rather than K_HEAP_DEFINE(), so this line is identical to the
- * one in the sys_heap adapter: same MEM_ARENA_SIZE, same alignment, same
- * section. The arena is the same storage at every step and for every
- * allocator in the comparison. */
+/*! The arena, sized MEM_ARENA_SIZE and shared by all steps and allocators. */
 static uint8_t arena[MEM_ARENA_SIZE] __noinit __aligned(8);
 
 /*******************************************************************************
  * Code
  ******************************************************************************/
 
-/*
- * A heap carves the arena on demand, so it has no granularity to be cut at and
- * the granularity is unused here. The whole array goes in at every step, the
- * same line the sys_heap adapter carries.
- *
- * What keeps the steps comparable is the count, not the size of the arena.
- * W3, W4 and W5 stop after N(s) allocations, so every step allocates the same
- * usable memory budget out of the same arena.
- *
- * k_heap_init() lays out the wait queue as well as the arena, which is
- * harmless here because nothing ever pends on this heap, and is part of what
- * W6 separates from the sys_heap number.
- *
- * W6 holds the one kernel call.
+/*!
+ * \brief Lays out the arena as a k_heap. \a granularity is unused: a heap
+ *        carves the arena on demand.
  */
 void mem_allocator_create_arena(size_t granularity)
 {
@@ -65,24 +44,13 @@ void mem_allocator_create_arena(size_t granularity)
   k_heap_init(&test_heap, arena, sizeof(arena));
 }
 
-/*
- * Nothing to tear down. The arena is an array this adapter owns, the creation
- * overwrites it in place, and the allocator holds nothing outside it that
- * could be given back.
- *
- * What stands here until the next creation is therefore the previous arena.
- * Nothing allocates out of it: the harness creates before it allocates, every
- * time.
- */
+/*! \brief No-op: the arena is a plain array, overwritten in place on the next create. */
 void mem_allocator_destroy_arena(void)
 {
   return;
 }
 
-/*
- * Nothing to trim. The arena the creation handed over is the whole of what
- * this allocator was given, so its capacity is its own.
- */
+/*! \brief No-op: this allocator has no store behind the arena to trim. */
 void mem_allocator_trim_store(void)
 {
   return;
@@ -99,21 +67,13 @@ void mem_allocator_free(void *allocation)
   k_heap_free(&test_heap, allocation);
 }
 
-/*
- * The same algorithm as sys_heap, so the same three W7 runs are expected to
- * classify the same way; a difference between the two tests there would be the
- * wrapper changing the search, which is worth knowing.
- */
+/*! \brief Reports that arena creation calls the allocator's own init. */
 bool mem_allocator_create_is_native(void)
 {
   return true;
 }
 
-/*
- * Never measured, and read only outside a window. A field read out of the
- * allocator's own state, not the number this adapter passed in. k_heap wraps
- * a sys_heap, so all three heap adapters read the same fields the same way.
- */
+/*! \brief Returns the arena size as reported by the allocator's own state. */
 size_t mem_allocator_arena_bytes(void)
 {
   return mem_zephyr_heap_real_arena(&test_heap.heap);

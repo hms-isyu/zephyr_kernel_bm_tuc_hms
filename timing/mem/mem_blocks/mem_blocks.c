@@ -8,21 +8,11 @@
 /******************************************************************************/
 
 /*
- * Adapter: Zephyr sys_mem_blocks.
+ * Adapter: Zephyr sys_mem_blocks, fixed-size.
  *
- * Fixed-size pieces again, but over a bitmap rather than a list threaded
- * through the free pieces, and without a kernel object: there is no wait
- * queue, and no runtime init either, so where the slab adapter re-initializes
- * one object per step this one declares nine and switches between them.
- *
- * The nine share one buffer. Only one is ever live, the buffer contents are
- * never read, and each carries its own bitmap, which is the only state that
- * matters.
- *
- * sys_bitarray_alloc() scans 32-bit bundles from bit zero until one is not all
- * ones, so this is the one fixed-size allocator here whose allocation is not
- * constant time: the cost answers to the number of leading allocated pieces.
- * That is what W3 puts one window over.
+ * Pieces are tracked in a bitmap instead of a threaded free list, with no
+ * kernel object. One pool per sweep step is declared at compile time and
+ * all share the arena buffer; only one pool is live at a time.
  */
 
 #include <zephyr/kernel.h>
@@ -40,18 +30,11 @@
 BUILD_ASSERT((MEM_ARENA_SIZE & (MEM_ARENA_SIZE - 1U)) == 0U,
              "the arena must be a power of two");
 
-/* The pieces the whole arena cuts into at a step, not the N(s) the usable
- * memory budget pays for: R5 hands the allocator all of what the adapter
- * declares, and the fill stops on its count rather than on the pool running
- * out. */
+/* Pieces the whole arena cuts into at a step. */
 #define MB_BLOCKS_AT(s_) (MEM_ARENA_SIZE / (1U << (s_)))
 
-/*
- * Which pool a granularity picks, as one count-trailing-zeros rather than a
- * search. The harness only ever asks for a power of two between 2^MEM_S_MIN
- * and 2^MEM_S_MAX, and W6 times this call, so the pool has to be reached in
- * constant time or the sweep would carry the length of the search.
- */
+/* Pool index for a granularity, via count-trailing-zeros for constant
+ * time. */
 #define MB_STEP_OF(granularity_)                                                 ((uint32_t) __builtin_ctz((uint32_t) (granularity_)) - MEM_S_MIN)
 
 /*******************************************************************************
@@ -59,8 +42,8 @@ BUILD_ASSERT((MEM_ARENA_SIZE & (MEM_ARENA_SIZE - 1U)) == 0U,
  ******************************************************************************/
 
 /* The arena: MEM_ARENA_SIZE, the same storage every adapter in the
- * comparison declares. The bitmap is beside the buffer rather than inside it,
- * so all of the array is available to pieces, as it is for the slab. */
+ * comparison declares. The bitmap lives beside the buffer, so all of the
+ * array is available to pieces, as it is for the slab. */
 static uint8_t arena[MEM_ARENA_SIZE] __noinit __aligned(8);
 
 /* One pool per step of the sweep, 2^MEM_S_MIN to 2^MEM_S_MAX bytes a piece. */
@@ -86,17 +69,10 @@ static sys_mem_blocks_t *test_live = &pool_s3;
  * Code
  ******************************************************************************/
 
-/*
- * Picks the pool for this granularity and clears its bitmap, which is the
- * whole of a sys_mem_blocks pool's state: the buffer holds no links and no
- * headers, so a cleared bitmap is a pool that has never been allocated out of.
+/**
+ * @brief Selects the pool for this granularity and clears its bitmap.
  *
- * sys_mem_blocks has no arena creation of its own - the pools are laid out at
- * compile time, which is why the adapter carries one per step of the sweep -
- * so this is the adapter writing the allocator's state rather than the
- * allocator laying out its own arena, and mem_allocator_create_is_native()
- * says so. The work is one word per 32 pieces, against the slab's one link per
- * piece, which is what the W6 sweep puts side by side.
+ * @param [in] granularity Size of each piece, in bytes.
  */
 void mem_allocator_create_arena(size_t granularity)
 {
@@ -108,23 +84,17 @@ void mem_allocator_create_arena(size_t granularity)
   }
 }
 
-/*
- * Nothing to tear down. The pools are laid out at compile time and share one
- * buffer, so there is nothing to give back and nothing the next creation does
- * not overwrite: it clears the bitmap of whichever pool it picks, and a
- * cleared bitmap is a pool that has never been allocated out of.
- *
- * What stands here until the next creation is the previous arena. Nothing
- * allocates out of it: the harness creates before it allocates, every time.
+/**
+ * @brief No-op: pools are laid out at compile time and cleared on the next
+ *        create.
  */
 void mem_allocator_destroy_arena(void)
 {
   return;
 }
 
-/*
- * Nothing to trim. The buffer is the whole of what the pool was given, so it
- * refuses at the arena's edge on its own.
+/**
+ * @brief No-op: a pool has no trim_store beyond the arena bounds.
  */
 void mem_allocator_trim_store(void)
 {
@@ -132,10 +102,11 @@ void mem_allocator_trim_store(void)
 }
 
 
-/*
- * Whether a request fits the granularity is now the harness's question,
- * asked through mem_allocator_is_fixed_size(); this call makes no comparison
- * of its own.
+/**
+ * @brief Allocates one piece from the live pool.
+ *
+ * @param [in] bytes Unused; a pool serves the granularity size only.
+ * @return Pointer to the piece, or NULL when the pool is full.
  */
 void *mem_allocator_alloc(size_t bytes)
 {
@@ -146,29 +117,31 @@ void *mem_allocator_alloc(size_t bytes)
   return allocation;
 }
 
+/**
+ * @brief Returns a piece to the live pool.
+ *
+ * @param [in] allocation Piece to reclaim.
+ */
 void mem_allocator_free(void *allocation)
 {
   (void) sys_mem_blocks_free(test_live, 1U, &allocation);
 }
 
-/*
- * Layout L cannot be built out of one piece size, so all three W7 runs record
- * SETUP_FAILED, the same answer the slab gives and for the same reason.
+/**
+ * @brief Reports whether mem_allocator_create_arena() calls the allocator's
+ *        own layout routine.
+ *
+ * @return false: pools are laid out at compile time, not by this call.
  */
-
-/* There is no sys_mem_blocks_init(); see mem_allocator_create_arena above. */
 bool mem_allocator_create_is_native(void)
 {
   return false;
 }
 
-/*
- * The real arena, read out of the pool's own state: the pieces it holds times
- * the size it cuts them at. blk_sz_shift is the ilog2 of the piece size, so
- * the shift reconstructs the size the pool was configured with rather than the
- * one this adapter passed in.
+/**
+ * @brief Returns the arena size the live pool reports.
  *
- * Never measured. Read only outside a window.
+ * @return Piece count times piece size, in bytes.
  */
 size_t mem_allocator_arena_bytes(void)
 {
@@ -176,22 +149,11 @@ size_t mem_allocator_arena_bytes(void)
          << test_live->info.blk_sz_shift;
 }
 
-/*
- * The total used space: the pieces in use times the piece size, per R22.
+/**
+ * @brief Returns the space in use, counted via a bitmap popcount so no
+ *        stats counter is added to the allocate or free path.
  *
- * used_blocks in struct sys_mem_blocks_info, mem_blocks.h:89, sits behind
- * CONFIG_SYS_MEM_BLOCKS_RUNTIME_STATS, which R17 forbids enabling: it would
- * add counter maintenance to the allocate and the free path, the paths W1
- * through W5 measure. The count is therefore taken from the bitmap instead,
- * through sys_bitarray_popcount_region(), bitarray.h:223, which is ungated and
- * touches nothing at allocate or free time. num_blocks and blk_sz_shift,
- * mem_blocks.h:86 and :87, are ungated too.
- *
- * A pool charges no per piece header, so this is the payload and the cost at
- * once, as it is for the slab.
- *
- * Never measured. Read only outside a window, after the fill. The popcount
- * walks the bitmap, which is exactly why it may not sit inside one.
+ * @return Pieces in use times piece size, in bytes.
  */
 size_t mem_allocator_used_bytes(void)
 {
@@ -207,17 +169,11 @@ size_t mem_allocator_used_bytes(void)
   return count << test_live->info.blk_sz_shift;
 }
 
-/*
- * The fixed arena cost: what the pool spends on having an arena at all.
+/**
+ * @brief Returns the fixed bookkeeping cost: the pool object plus its
+ *        bitmap.
  *
- * A pool writes nothing into the buffer, it tracks occupancy in a bitmap
- * beside it, so its bookkeeping is that bitmap plus the pool object. The
- * bitmap is num_bundles bundles of uint32_t, both fields of struct
- * sys_bitarray, bitarray.h:34 to 40, and neither moves as pieces are handed
- * out. That is the whole of what this allocator spends independent of the live
- * allocations.
- *
- * Never measured. Read only outside a window.
+ * @return Bytes spent independent of how many pieces are live.
  */
 size_t mem_allocator_fixed_bytes(void)
 {
@@ -225,40 +181,33 @@ size_t mem_allocator_fixed_bytes(void)
          + ((size_t) test_live->bitmap->num_bundles * sizeof(uint32_t));
 }
 
-/*!
- * \brief Reports whether this allocator serves nothing larger than the
- *        granularity it was cut at.
+/**
+ * @brief Reports whether this allocator serves only its granularity size.
  *
- * A pool is one arena of granularity-sized pieces and can serve nothing
- * larger, so it answers true, the same as the slab.
+ * @return true always: a pool holds granularity-sized pieces only.
  */
 bool mem_allocator_is_fixed_size(void)
 {
   return true;
 }
 
-/*!
- * \brief Reports whether mem_allocator_alloc_n() is one call on this
- *        allocator rather than a stand-in that always refuses.
+/**
+ * @brief Reports whether mem_allocator_alloc_n() performs a real batch call.
  *
- * sys_mem_blocks_alloc() takes a count on its own, so this adapter answers
- * true.
+ * @return true: sys_mem_blocks_alloc() takes a count natively.
  */
 bool mem_allocator_supports_alloc_n(void)
 {
   return true;
 }
 
-/*!
- * \brief Allocates count pieces in one call. Without blocking.
+/**
+ * @brief Allocates count pieces from the live pool in one call.
  *
- * One call, asking the currently selected pool for count pieces in the same
- * request.
- *
- * \param [in]  count       How many pieces to allocate.
- * \param [out] allocations Filled with count pointers on success, one per
+ * @param [in]  count       How many pieces to allocate.
+ * @param [out] allocations Filled with count pointers on success, one per
  *                          piece.
- * \return true on success, false when the pool refused.
+ * @return true on success, false when the pool refused.
  */
 bool mem_allocator_alloc_n(size_t count, void **allocations)
 {
