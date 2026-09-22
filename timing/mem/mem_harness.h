@@ -154,7 +154,8 @@ typedef enum mem_status_t
   MEM_STATUS_NO_CREATE,      /**< @brief Creation does not empty arena. */
   MEM_STATUS_NO_RECLAIM,     /**< @brief Free does not reclaim bytes. */
   MEM_STATUS_SETUP_FAILED,   /**< @brief State incompatible with arena. */
-  MEM_STATUS_UNBOUNDED       /**< @brief Filling loop hit maximum limits. */
+  MEM_STATUS_UNBOUNDED,      /**< @brief Filling loop hit maximum limits. */
+  MEM_STATUS_CLOG_TOO_SHORT  /**< @brief Clog shorter than the sweep needs. */
 } mem_status_t;
 
 /** @brief Failure flag: Arena creation fails to empty. */
@@ -169,6 +170,8 @@ typedef enum mem_status_t
 #define MEM_FAILURE_ARENA_SIZE (1U << 4)
 /** @brief Failure flag: Used space reported mismatches internal tracking. */
 #define MEM_FAILURE_USED_BYTES (1U << 5)
+/** @brief Failure flag: Space invariant R <= T(s) <= A violated. */
+#define MEM_FAILURE_SPACE_INVARIANT (1U << 6)
 
 /**
  * @brief Result data for a single W7 run.
@@ -193,7 +196,7 @@ typedef struct mem_results_t
                         - 1). */
 
   uint32_t real_arena[MEM_S_COUNT]; /**< @brief Reported arena size per step. */
-  uint32_t w3_used_bytes[MEM_S_COUNT]; /**< @brief Total consumed space for N(s)
+  uint32_t w4_used_bytes[MEM_S_COUNT]; /**< @brief Total consumed space for N(s)
                                           allocations. */
   uint32_t
     fixed_bytes[MEM_S_COUNT]; /**< @brief Fixed allocator overhead per step. */
@@ -201,23 +204,23 @@ typedef struct mem_results_t
   mem_status_t w1_status[MEM_S_COUNT]; /**< @brief Status of W1 alloc. */
   bool         w1_served[MEM_S_COUNT]; /**< @brief True if W1 was served. */
 
-  mem_status_t w2_status[MEM_S_COUNT]; /**< @brief Status of W2 free. */
+  mem_status_t w3_status[MEM_S_COUNT]; /**< @brief Status of W2 free. */
 
-  mem_status_t w3_status[MEM_S_COUNT]; /**< @brief Status of W3 fill. */
+  mem_status_t w4_status[MEM_S_COUNT]; /**< @brief Status of W3 fill. */
   uint32_t
-    w3_allocations[MEM_S_COUNT]; /**< @brief Number of allocations held. */
-  bool w3_count_expected[MEM_S_COUNT]; /**< @brief True if count matched N(s). */
+    w4_allocations[MEM_S_COUNT]; /**< @brief Number of allocations held. */
+  bool w4_count_expected[MEM_S_COUNT]; /**< @brief True if count matched N(s). */
 
-  mem_status_t w4_status[MEM_S_COUNT];  /**< @brief Status of W4 free. */
-  uint32_t w4_allocations[MEM_S_COUNT]; /**< @brief W4 allocations created. */
-  uint32_t w4_holes[MEM_S_COUNT]; /**< @brief Measured W4 frees (holes). */
+  mem_status_t w5_status[MEM_S_COUNT];  /**< @brief Status of W4 free. */
+  uint32_t w5_allocations[MEM_S_COUNT]; /**< @brief W4 allocations created. */
+  uint32_t w5_holes[MEM_S_COUNT]; /**< @brief Measured W4 frees (holes). */
 
-  mem_status_t w5_status[MEM_S_COUNT];  /**< @brief Status of W5 free. */
-  uint32_t w5_allocations[MEM_S_COUNT]; /**< @brief W5 allocations created. */
-  uint32_t w5_holes[MEM_S_COUNT]; /**< @brief Measured W5 frees (holes). */
+  mem_status_t w6_status[MEM_S_COUNT];  /**< @brief Status of W5 free. */
+  uint32_t w6_allocations[MEM_S_COUNT]; /**< @brief W5 allocations created. */
+  uint32_t w6_holes[MEM_S_COUNT]; /**< @brief Measured W5 frees (holes). */
 
-  mem_status_t w6_status[MEM_S_COUNT]; /**< @brief Status of W6 create. */
-  bool         w6_native; /**< @brief True if measured directly on allocator. */
+  mem_status_t w8_status[MEM_S_COUNT]; /**< @brief Status of W6 create. */
+  bool         w8_native; /**< @brief True if measured directly on allocator. */
 
   mem_w7_result_t w7[MEM_W7_RUN_COUNT]; /**< @brief Results of W7 runs. */
   mem_fit_guess_t w7_guess; /**< @brief Inferred allocator fit policy. */
@@ -226,11 +229,11 @@ typedef struct mem_results_t
 /* Measurement Series Externs */
 extern mem_results_t             mem_results;
 extern BMTH_measurement_series_t mem_w1_alloc[MEM_S_COUNT];
-extern BMTH_measurement_series_t mem_w2_free[MEM_S_COUNT];
-extern BMTH_measurement_series_t mem_w3_fill[MEM_S_COUNT];
-extern BMTH_measurement_series_t mem_w4_free[MEM_S_COUNT];
+extern BMTH_measurement_series_t mem_w3_free[MEM_S_COUNT];
+extern BMTH_measurement_series_t mem_w4_alloc[MEM_S_COUNT];
 extern BMTH_measurement_series_t mem_w5_free[MEM_S_COUNT];
-extern BMTH_measurement_series_t mem_w6_create[MEM_S_COUNT];
+extern BMTH_measurement_series_t mem_w6_free[MEM_S_COUNT];
+extern BMTH_measurement_series_t mem_w8_create[MEM_S_COUNT];
 extern BMTH_measurement_series_t mem_w7a_alloc;
 
 /**
