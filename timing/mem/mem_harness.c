@@ -49,6 +49,7 @@ static BMTH_time_marker_t mem_stop_time  = 0U;
 mem_results_t mem_results;
 
 BMTH_measurement_series_t mem_w1_alloc[MEM_S_COUNT];
+BMTH_measurement_series_t mem_w2_alloc[MEM_S_COUNT];
 BMTH_measurement_series_t mem_w3_free[MEM_S_COUNT];
 BMTH_measurement_series_t mem_w4_alloc[MEM_S_COUNT];
 BMTH_measurement_series_t mem_w5_free[MEM_S_COUNT];
@@ -329,6 +330,77 @@ static void mem_run_w1(void)
       mem_results.w1_status[i] = MEM_STATUS_SETUP_FAILED;
       mem_results.failures |= MEM_FAILURE_ARENA_SIZE;
     }
+  }
+
+  mem_allocator_destroy_arena();
+  mem_allocator_create_arena(MEM_SIZE_OF_S(MEM_S_MIN));
+  mem_allocator_trim_store();
+}
+
+/*
+ * W2, alloc into a hole of exactly r. Three allocations of 2^s are made on a
+ * freshly created arena and the middle one is freed, which opens a hole of
+ * exactly the request size between two live neighbours. The measured
+ * allocation is the one that has to land in that hole.
+ *
+ * A step whose setup does not build all three allocations has no hole to
+ * measure into. That cannot be a property of the allocator on this arena, so
+ * it is recorded as a failed setup and no sample is taken.
+ */
+static void mem_run_w2(void)
+{
+  for (uint32_t s = MEM_S_MIN; s <= MEM_S_MAX; s++)
+  {
+    const uint32_t i     = MEM_INDEX_OF_S(s);
+    const size_t   bytes = MEM_SIZE_OF_S(s);
+    void          *a0;
+    void          *a1;
+    void          *a2;
+
+    mem_allocator_destroy_arena();
+    mem_allocator_create_arena(bytes);
+    mem_allocator_trim_store();
+
+    a0 = mem_allocator_alloc(bytes);
+    a1 = mem_allocator_alloc(bytes);
+    a2 = mem_allocator_alloc(bytes);
+
+    if ((a0 == NULL) || (a1 == NULL) || (a2 == NULL))
+    {
+      mem_results.w2_status[i] = MEM_STATUS_SETUP_FAILED;
+
+      if (a0 != NULL)
+      {
+        mem_allocator_free(a0);
+      }
+
+      if (a1 != NULL)
+      {
+        mem_allocator_free(a1);
+      }
+
+      if (a2 != NULL)
+      {
+        mem_allocator_free(a2);
+      }
+
+      continue;
+    }
+
+    mem_allocator_free(a1);
+
+    MEM_MEASURE(&mem_w2_alloc[i], mem_allocation = mem_allocator_alloc(bytes));
+
+    mem_results.w2_status[i] = MEM_STATUS_OK;
+
+    if (mem_allocation != NULL)
+    {
+      mem_allocator_free(mem_allocation);
+      mem_allocation = NULL;
+    }
+
+    mem_allocator_free(a0);
+    mem_allocator_free(a2);
   }
 
   mem_allocator_destroy_arena();
@@ -1066,6 +1138,7 @@ uint32_t mem_harness_run(void)
   }
 
   mem_run_w1();
+  mem_run_w2();
   mem_run_w3();
   mem_run_w4();
   mem_run_w8();
@@ -1111,6 +1184,9 @@ void mem_harness_init(void)
   {
     BMTH_mseries_initialize(
       &mem_w1_alloc[i], 0, NULL,
+      BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
+    BMTH_mseries_initialize(
+      &mem_w2_alloc[i], 0, NULL,
       BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
     BMTH_mseries_initialize(
       &mem_w3_free[i], 0, NULL,

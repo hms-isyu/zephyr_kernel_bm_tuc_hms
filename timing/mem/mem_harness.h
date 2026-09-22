@@ -204,6 +204,9 @@ typedef struct mem_results_t
   mem_status_t w1_status[MEM_S_COUNT]; /**< @brief Status of W1 alloc. */
   bool         w1_served[MEM_S_COUNT]; /**< @brief True if W1 was served. */
 
+  mem_status_t
+    w2_status[MEM_S_COUNT]; /**< @brief Status of W2 alloc into a hole. */
+
   mem_status_t w3_status[MEM_S_COUNT]; /**< @brief Status of W2 free. */
 
   mem_status_t w4_status[MEM_S_COUNT]; /**< @brief Status of W3 fill. */
@@ -229,6 +232,7 @@ typedef struct mem_results_t
 /* Measurement Series Externs */
 extern mem_results_t             mem_results;
 extern BMTH_measurement_series_t mem_w1_alloc[MEM_S_COUNT];
+extern BMTH_measurement_series_t mem_w2_alloc[MEM_S_COUNT];
 extern BMTH_measurement_series_t mem_w3_free[MEM_S_COUNT];
 extern BMTH_measurement_series_t mem_w4_alloc[MEM_S_COUNT];
 extern BMTH_measurement_series_t mem_w5_free[MEM_S_COUNT];
