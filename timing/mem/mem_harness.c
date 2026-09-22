@@ -690,14 +690,15 @@ static void mem_run_w5(void)
 }
 
 /*
- * W5, free with both neighbours. The same sweep as W4 over the same filled
- * arena, except that every even index was freed first, so each measured free
- * has free space on both sides and takes both coalesce branches.
+ * W6, free with both neighbours holes. c(s) measured frees of the odd
+ * indices in a clog of the requested space, with every even index up to and
+ * including 2c freed first, so each freed allocation has a hole on both
+ * sides and every free coalesces on both branches.
  *
- * The axis is the sweep index rather than the number of holes, and it runs the
- * other way: each measured free merges three pieces of free space into one, so
- * the free list gets shorter as the sweep proceeds where in W4 it gets longer.
- * W5 minus W4 at the same index is what the two coalesce branches cost.
+ * N(s) is the clog's actual count, read once between the clog and the
+ * first free. The clog must reach at least 2c(s)+1 allocations, one more
+ * than W5, so that index 2c exists for the even sweep; short of that the
+ * step is marked and no sample is taken.
  */
 static void mem_run_w6(void)
 {
@@ -705,6 +706,7 @@ static void mem_run_w6(void)
   {
     const uint32_t j     = MEM_INDEX_OF_S(s);
     const size_t   bytes = MEM_SIZE_OF_S(s);
+    const uint32_t c     = (uint32_t) (MEM_REQUESTED_SPACE / bytes);
 
     mem_allocator_destroy_arena();
     mem_allocator_create_arena(bytes);
@@ -722,32 +724,27 @@ static void mem_run_w6(void)
 
     mem_results.w6_allocations[j] = mem_held_count;
 
-    /* Every even index, the last allocation included: it is the odd sweep
-     * that excludes it, and leaving it allocated here would give the highest
-     * measured free a live neighbour where every other has a free one. */
-    for (uint32_t k = 0U; k < mem_held_count; k += 2U)
+    if (mem_held_count < 2U * c + 1U)
     {
-      mem_allocator_free(mem_held[k]);
-      mem_held[k] = NULL;
+      mem_results.w6_status[j] = MEM_STATUS_CLOG_TOO_SHORT;
+      mem_free_held();
+      mem_allocator_destroy_arena();
+      mem_allocator_create_arena(bytes);
+      mem_allocator_trim_store();
+      continue;
     }
 
-    if (mem_sweep_odd(&mem_w6_free[j]))
+    /* Even indices 0..2c, untimed: both neighbours of every odd index
+     * 1..2c-1 become holes before the measured sweep starts. */
+    for (uint32_t i = 0U; i <= 2U * c; i += 2U)
     {
-      mem_results.w6_holes[j]  = mem_w6_free[j].iteration_count;
-      mem_results.w6_status[j] = MEM_STATUS_OK;
-    }
-    else
-    {
-      mem_results.w6_status[j] = MEM_STATUS_SETUP_FAILED;
+      mem_allocator_free(mem_held[i]);
+      mem_held[i] = NULL;
     }
 
-    /* As in W4: a fill short of N(s) is a refusal on an arena sized so that
-     * none can happen. Marked, and the samples stay. */
-    if (mem_results.w6_allocations[j] != (uint32_t) (MEM_ARENA_SIZE >> s))
-    {
-      mem_results.w6_status[j] = MEM_STATUS_SETUP_FAILED;
-      mem_results.failures |= MEM_FAILURE_ARENA_SIZE;
-    }
+    mem_sweep_odd(&mem_w6_free[j], c);
+    mem_results.w6_holes[j]  = c;
+    mem_results.w6_status[j] = MEM_STATUS_OK;
 
     mem_free_held();
     mem_allocator_destroy_arena();
