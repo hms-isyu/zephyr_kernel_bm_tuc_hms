@@ -196,10 +196,9 @@ typedef struct mem_results_t
                         - 1). */
 
   uint32_t real_arena[MEM_S_COUNT]; /**< @brief Reported arena size per step. */
-  uint32_t w4_used_bytes[MEM_S_COUNT]; /**< @brief Total consumed space for N(s)
-                                          allocations. */
+  uint32_t w4_used_bytes[MEM_S_COUNT]; /**< @brief Total space used, T(s). */
   uint32_t
-    fixed_bytes[MEM_S_COUNT]; /**< @brief Fixed allocator overhead per step. */
+    fixed_bytes[MEM_S_COUNT]; /**< @brief Fixed arena overhead per step. */
 
   mem_status_t w1_status[MEM_S_COUNT]; /**< @brief Status of W1 alloc. */
   bool         w1_served[MEM_S_COUNT]; /**< @brief True if W1 was served. */
@@ -207,25 +206,25 @@ typedef struct mem_results_t
   mem_status_t
     w2_status[MEM_S_COUNT]; /**< @brief Status of W2 alloc into a hole. */
 
-  mem_status_t w3_status[MEM_S_COUNT]; /**< @brief Status of W2 free. */
+  mem_status_t w3_status[MEM_S_COUNT]; /**< @brief Status of W3 free. */
 
-  mem_status_t w4_status[MEM_S_COUNT]; /**< @brief Status of W3 fill. */
+  mem_status_t w4_status[MEM_S_COUNT]; /**< @brief Status of W4 fill. */
   uint32_t
-    w4_allocations[MEM_S_COUNT]; /**< @brief Number of allocations held. */
-  bool w4_count_expected[MEM_S_COUNT]; /**< @brief True if count matched N(s). */
+    w4_allocations[MEM_S_COUNT]; /**< @brief Allocation count reached. */
+  bool w4_count_expected[MEM_S_COUNT]; /**< @brief True if count reached c(s). */
 
   mem_status_t w4_fixed_status
     [MEM_S_COUNT]; /**< @brief Status of W4_FIXED_SIZE alloc_n. */
 
-  mem_status_t w5_status[MEM_S_COUNT];  /**< @brief Status of W4 free. */
-  uint32_t w5_allocations[MEM_S_COUNT]; /**< @brief W4 allocations created. */
-  uint32_t w5_holes[MEM_S_COUNT]; /**< @brief Measured W4 frees (holes). */
+  mem_status_t w5_status[MEM_S_COUNT];  /**< @brief Status of W5 free. */
+  uint32_t w5_allocations[MEM_S_COUNT]; /**< @brief N(s) allocations held. */
+  uint32_t w5_holes[MEM_S_COUNT]; /**< @brief Measured W5 frees (holes). */
 
-  mem_status_t w6_status[MEM_S_COUNT];  /**< @brief Status of W5 free. */
-  uint32_t w6_allocations[MEM_S_COUNT]; /**< @brief W5 allocations created. */
-  uint32_t w6_holes[MEM_S_COUNT]; /**< @brief Measured W5 frees (holes). */
+  mem_status_t w6_status[MEM_S_COUNT];  /**< @brief Status of W6 free. */
+  uint32_t w6_allocations[MEM_S_COUNT]; /**< @brief N(s) allocations held. */
+  uint32_t w6_holes[MEM_S_COUNT]; /**< @brief Measured W6 frees (holes). */
 
-  mem_status_t w8_status[MEM_S_COUNT]; /**< @brief Status of W6 create. */
+  mem_status_t w8_status[MEM_S_COUNT]; /**< @brief Status of W8 arena create. */
   bool         w8_native; /**< @brief True if measured directly on allocator. */
 
   mem_w7_result_t w7[MEM_W7_RUN_COUNT]; /**< @brief Results of W7 runs. */

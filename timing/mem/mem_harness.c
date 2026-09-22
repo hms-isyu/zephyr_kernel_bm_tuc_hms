@@ -58,47 +58,27 @@ BMTH_measurement_series_t mem_w6_free[MEM_S_COUNT];
 BMTH_measurement_series_t mem_w8_create[MEM_S_COUNT];
 BMTH_measurement_series_t mem_w7a_alloc;
 
-/* W5 and W6 take one sample per freed index, so their series need somewhere to
- * put the whole sweep. Every other workload takes one sample per run and reads
- * out of last_value. */
+/* One sample per freed index for the W5/W6 sweeps. */
 static uint32_t mem_w5_buffer[MEM_S_COUNT][MEM_HOLES_MAX];
 static uint32_t mem_w6_buffer[MEM_S_COUNT][MEM_HOLES_MAX];
 
-/* Written by the measured call, and file scope, so the window carries the
- * INSIDE_FUNCTION_FILE_SCOPE_VARS artefact the series is initialized with and
- * the call cannot be optimized away. */
+/* File scope so the measured call carries INSIDE_FUNCTION_FILE_SCOPE_VARS. */
 static void *mem_allocation = NULL;
 
-/* Filled by the single alloc_n() call W4_FIXED_SIZE measures, and the
- * captured return beside it, both file scope so the window carries the
- * INSIDE_FUNCTION_FILE_SCOPE_VARS artefact. MEM_HOLES_MAX is c(MEM_S_MIN),
- * the largest count any step needs. */
+/* Buffer and result for the single alloc_n() call W4_FIXED_SIZE measures. */
 static void *mem_alloc_n_buffer[MEM_HOLES_MAX];
 static bool  mem_alloc_n_ok = false;
 
-/* False when the allocator served nothing at all at the smallest request, in
- * which case there is no capability to establish and no workload to run. */
+/* False if the allocator serves nothing at the smallest request. */
 static bool mem_probe_serves = false;
 
-/*
- * The allocations the harness holds, by index: the position in the order the
- * filling loop obtained them. An array and not a list threaded through the
- * allocations themselves, because W4 and W5 address their state by index and
- * because the capacity is 2^MEM_S_MAX bytes, so the array is bounded by
- * MEM_ALLOCATIONS_MAX and small.
- *
- * Index is allocation order and not address order. For an allocator that
- * carves one contiguous arena the two coincide up to direction, which is all
- * W4 and W5 need: they free every second index, and every second index is
- * every second allocation physically whichever way the addresses run.
- */
+/* Allocations the harness holds, indexed by allocation order (not address
+ * order); W4 and W5 address their state by index. */
 static void    *mem_held[MEM_ALLOCATIONS_MAX];
 static uint32_t mem_held_count = 0U;
 
-/*
- * Layout L. Physical order, which is allocation order. The separator between
- * each pair of gaps is what stops the five frees from merging into one.
- */
+/* W7 layout L, in physical/allocation order. Separators stop the five gaps
+ * from merging into one on free. */
 static const mem_w7_step_t mem_w7_layout[] = {
   {MEM_W7_SEPARATOR, false, 0U}, {MEM_W7_DECOY, true, MEM_W7_GAP_BEFORE},
   {MEM_W7_SEPARATOR, false, 0U}, {MEM_W7_LARGE, true, MEM_W7_GAP_LARGE},
@@ -109,14 +89,8 @@ static const mem_w7_step_t mem_w7_layout[] = {
                                   * tail of the arena        */
 };
 
-/*
- * The order the five gaps are freed in, per run. This is the only thing that
- * differs between W7_A and W7_B, and it is the whole of the experiment: on an
- * insertion-ordered free list the later of the two candidates to be freed is
- * the nearer to the head, so a search that takes the first fitting entry of
- * that list answers differently under the two orders, while a search that
- * walks the arena by address answers the same under both.
- */
+/* Free order of the five gaps per run; the only difference between W7_A and
+ * W7_B, and the whole of the experiment. */
 static const uint8_t mem_w7_free_order[MEM_W7_RUN_COUNT][MEM_W7_GAP_COUNT] = {
   /* A: physical order, so EXACT is freed after LARGE */
   {MEM_W7_GAP_BEFORE, MEM_W7_GAP_LARGE, MEM_W7_GAP_EXACT, MEM_W7_GAP_AFTER1,
@@ -142,18 +116,17 @@ __attribute__((weak)) void mem_allocator_trim_store(void)
  * Code
  ******************************************************************************/
 
+/** @brief Checks whether @p capability is set in mem_results.capabilities. */
 static bool mem_has(uint32_t capability)
 {
   return (mem_results.capabilities & capability) != 0U;
 }
 
-/*
- * Clogs the arena: allocates until the allocator is full, keeping every
- * allocation by index. Never inside a window.
- *
- * Stops when mem_allocator_alloc returns NULL, which is full; mem_held_count
- * is then N(s), which is what the caller checks. Returns false only when the
- * allocator hands out more than MEM_ALLOCATIONS_MAX, the array bound.
+/**
+ * @brief Clogs the arena: allocates @p bytes at a time until full, holding
+ *        each allocation by index. Untimed.
+ * @param[in] bytes Request size per allocation.
+ * @return false if the allocator exceeds MEM_ALLOCATIONS_MAX, true otherwise.
  */
 static bool mem_clog(size_t bytes)
 {
@@ -183,8 +156,7 @@ static bool mem_clog(size_t bytes)
   return true;
 }
 
-/* Frees whatever of the held state is still standing. Entries the sweep
- * already freed were set to NULL by it. */
+/** @brief Frees every non-NULL entry of mem_held and resets mem_held_count. */
 static void mem_free_held(void)
 {
   for (uint32_t i = 0U; i < mem_held_count; i++)
@@ -199,30 +171,9 @@ static void mem_free_held(void)
   mem_held_count = 0U;
 }
 
-/*
- * What the allocator can do, established before anything is measured.
- *
- * Two questions, and the workloads that depend on the answers are skipped
- * rather than measured when the answer is no:
- *
- *   reclaim  fill the arena, free all of it, fill it again. An allocator that
- *            gives the bytes back holds the same number of allocations the
- *            second time. A bump allocator holds none, and W4, W5 and all
- *            three W7 runs build their state by freeing, so for it those have
- *            no state to measure in and would report the cost of operating on
- *            an empty arena as though it were the cost of operating on a
- *            fragmented one.
- *   create   fill the arena, drop the references, create the arena again,
- *            fill again. The references are dropped deliberately: creating the
- *            arena has to recover from a full one, which is the state every
- *            workload leaves behind and the only way any of them gets a known
- *            arena back. An allocator whose creation does nothing holds none
- *            the second time.
- *
- * The reclaim question is asked first and from a clean arena, so its answer
- * does not depend on the creation question. The creation question is asked
- * from a full arena, so its answer does not depend on the reclaim question
- * either.
+/**
+ * @brief Probes whether the allocator reclaims freed bytes and whether arena
+ *        creation empties an arena, setting mem_results.capabilities.
  */
 static void mem_probe_capabilities(void)
 {
@@ -296,16 +247,9 @@ static void mem_probe_capabilities(void)
   }
 }
 
-/*
- * W1, alloc by size. Allocation cost against request size, with the arena
- * holding one free chunk and nothing else, which is the cheapest state there
- * is and therefore the floor the other allocation workloads are read against.
- *
- * Every step is run. On the arena no step is expected to be refused: one
- * allocation of 2^MEM_S_MAX out of MEM_ARENA_SIZE leaves the bytes the
- * arena multiplier adds untouched. A refusal here is therefore a fault of the
- * harness setup, marked through MEM_FAILURE_ARENA_SIZE, and w1_served still
- * says which steps it was.
+/**
+ * @brief W1: allocation cost by request size on a fresh arena holding no
+ *        hole.
  */
 static void mem_run_w1(void)
 {
@@ -343,15 +287,9 @@ static void mem_run_w1(void)
   mem_allocator_trim_store();
 }
 
-/*
- * W2, alloc into a hole of exactly r. Three allocations of 2^s are made on a
- * freshly created arena and the middle one is freed, which opens a hole of
- * exactly the request size between two live neighbours. The measured
- * allocation is the one that has to land in that hole.
- *
- * A step whose setup does not build all three allocations has no hole to
- * measure into. That cannot be a property of the allocator on this arena, so
- * it is recorded as a failed setup and no sample is taken.
+/**
+ * @brief W2: allocation cost into a hole of exactly the request size, opened
+ *        between two live neighbours.
  */
 static void mem_run_w2(void)
 {
@@ -414,19 +352,9 @@ static void mem_run_w2(void)
   mem_allocator_trim_store();
 }
 
-/*
- * W2, free with one neighbour. One allocation on a freshly created arena is
- * taken out of the one free chunk the arena is, so the rest of the arena is
- * left standing as its neighbour on one side and the allocator's own metadata
- * on the other.
- * Freeing it therefore takes exactly one coalesce branch on an allocator that
- * has them, which is what separates this row from W4 - no branch - and W5 -
- * both branches - at the same request size.
- *
- * A step whose setup allocation is refused has no free to measure. On the
- * arena that cannot be a property of the allocator, so it is recorded
- * as a failed setup and sets MEM_FAILURE_ARENA_SIZE rather than being skipped
- * silently.
+/**
+ * @brief W3: free cost with one neighbour adjacent to free space, so exactly
+ *        one coalesce branch is taken.
  */
 static void mem_run_w3(void)
 {
@@ -458,31 +386,10 @@ static void mem_run_w3(void)
   mem_allocator_trim_store();
 }
 
-/*
- * W4, aggregate allocate for the requested space. One window over the whole
- * loop, so the number is the aggregate cost of the N(s) allocations the
- * requested space pays for at that request size. Divided by w4_allocations it
- * is the average allocation over a run that starts on an empty arena and
- * finishes on one holding the whole requested space, which is the quantity W1
- * cannot give: W1 only ever allocates out of a pristine arena.
- *
- * The loop stops on whichever comes first: N(s) = MEM_REQUESTED_SPACE / 2^s
- * successful allocations, or a refusal. Both are recorded, the count reached
- * and whether the stop was a refusal. On the arena a refusal is not expected,
- * so it sets MEM_FAILURE_ARENA_SIZE, but the sample stays: a short run still
- * measured a real fill of a real arena and dropping it would be dropping a
- * data point.
- *
- * Inside the window: the loop's own compare, the allocate call and the
- * increment. Nothing else - the pointer each allocate returns is kept in one
- * scratch local and discarded, never in an array, which is why the arena is
- * emptied afterwards by creating it again and not by freeing.
- *
- * The total used space is read once the window is closed and the step's
- * allocations are still live, which is the one moment it can be taken. The
- * fixed arena cost does not move with them and is read beside it. The used
- * space must fall between the requested space and the arena size; outside
- * that range it sets MEM_FAILURE_SPACE_INVARIANT.
+/**
+ * @brief W4: aggregate cost of allocating the requested space, one window
+ *        over the whole fill loop, which stops on c(s) allocations or a
+ *        refusal. Also records T(s), the total space used.
  */
 static void mem_run_w4(void)
 {
@@ -530,16 +437,13 @@ static void mem_run_w4(void)
     mem_results.w4_count_expected[i] = (count == target) && !full;
     mem_results.w4_status[i]         = MEM_STATUS_OK;
 
-    /* A stop on full is not expected on this arena: the multiplier is there
-     * to make it impossible. The step is marked, and the sample it took
-     * stays. */
+    /* Not expected on this arena; the sample still stands. */
     if (full)
     {
       mem_results.failures |= MEM_FAILURE_ARENA_SIZE;
     }
 
-    /* The used space must not fall short of the requested space or run past
-     * the arena size. Either way the invariant is marked. */
+    /* used must fall within [requested space, arena size]. */
     if ((used < (uint32_t) MEM_REQUESTED_SPACE)
         || (used > (uint32_t) MEM_ARENA_SIZE))
     {
@@ -551,9 +455,7 @@ static void mem_run_w4(void)
     mem_allocator_trim_store();
   }
 
-  /* The total used space column is readable only if the adapter answered at
-   * every step. One 0 anywhere takes the whole column out of the comparison,
-   * because a column with a hole in it is not a column. */
+  /* Column only counts if every step reported a non-zero used_bytes. */
   mem_results.capabilities |= MEM_CAPABILITY_USED_BYTES;
 
   for (uint32_t i = 0U; i < MEM_S_COUNT; i++)
@@ -569,13 +471,10 @@ static void mem_run_w4(void)
   mem_allocator_trim_store();
 }
 
-/*
- * W4_FIXED_SIZE, the same requested space in one alloc_n() call. Same c(s)
- * allocations of 2^s as W4, but requested through a single count-taking call
- * instead of a loop, so the window holds exactly one call.
- *
- * Only applicable where the allocator supports alloc_n(); everywhere else the
- * step is marked NOT_APPLICABLE and no sample is taken.
+/**
+ * @brief W4_FIXED_SIZE: the same requested space as W4, in one alloc_n()
+ *        call. NOT_APPLICABLE where alloc_n() is unsupported (mem_blocks
+ *        only).
  */
 static void mem_run_w4_fixed(void)
 {
@@ -611,13 +510,11 @@ static void mem_run_w4_fixed(void)
   mem_allocator_trim_store();
 }
 
-/*
- * The sweep W5 and W6 share: c measured frees of the odd indices among the
- * first 2c entries of mem_held[], ascending, one MEM_MEASURE window each.
- * Odd indices, so every freed allocation keeps a live one on each side.
- *
- * The count is the caller's to guard: this helper takes c on trust and
- * assumes mem_held holds at least 2c live entries.
+/**
+ * @brief Frees the odd indices among the first 2c entries of mem_held,
+ *        ascending, one measured window per free. Shared by W5 and W6.
+ * @param[in] series Series to record each free into.
+ * @param[in] c      Number of frees; caller guarantees 2c live entries.
  */
 static void mem_sweep_odd(BMTH_measurement_series_t *series, uint32_t c)
 {
@@ -628,17 +525,10 @@ static void mem_sweep_odd(BMTH_measurement_series_t *series, uint32_t c)
   }
 }
 
-/*
- * W5, free with both neighbours live. c(s) measured frees of the odd
- * indices in a clog of the requested space, with every even index left
- * allocated, so each freed allocation has a live neighbour on both sides
- * and none of the frees coalesce.
- *
- * N(s) is the clog's actual count, read once between the clog and the
- * first free. The clog must reach at least 2c(s) allocations for the sweep
- * to have both an odd index and its two even neighbours to draw on at
- * every one of its c(s) frees; short of that the step is marked and no
- * sample is taken.
+/**
+ * @brief W5: c(s) measured frees with both neighbours live, so none coalesce.
+ *        Requires a clog of at least 2c(s); shorter clogs are marked
+ *        CLOG_TOO_SHORT.
  */
 static void mem_run_w5(void)
 {
@@ -689,16 +579,10 @@ static void mem_run_w5(void)
   mem_allocator_trim_store();
 }
 
-/*
- * W6, free with both neighbours holes. c(s) measured frees of the odd
- * indices in a clog of the requested space, with every even index up to and
- * including 2c freed first, so each freed allocation has a hole on both
- * sides and every free coalesces on both branches.
- *
- * N(s) is the clog's actual count, read once between the clog and the
- * first free. The clog must reach at least 2c(s)+1 allocations, one more
- * than W5, so that index 2c exists for the even sweep; short of that the
- * step is marked and no sample is taken.
+/**
+ * @brief W6: c(s) measured frees with both neighbours holes, so every free
+ *        coalesces on both branches. Requires a clog of at least 2c(s)+1;
+ *        shorter clogs are marked CLOG_TOO_SHORT.
  */
 static void mem_run_w6(void)
 {
@@ -734,8 +618,7 @@ static void mem_run_w6(void)
       continue;
     }
 
-    /* Even indices 0..2c, untimed: both neighbours of every odd index
-     * 1..2c-1 become holes before the measured sweep starts. */
+    /* Even indices 0..2c, untimed: opens holes for the sweep below. */
     for (uint32_t i = 0U; i <= 2U * c; i += 2U)
     {
       mem_allocator_free(mem_held[i]);
@@ -757,21 +640,8 @@ static void mem_run_w6(void)
   mem_allocator_trim_store();
 }
 
-/*
- * W6, arena creation. The cost of laying the arena out, against the
- * granularity it is cut at. No setup: this is the one workload that measures
- * the call every other workload uses to get a known arena, so there is nothing
- * to put in front of it.
- *
- * The granularity is the axis because that is what the work responds to. An
- * allocator that lays its arena out by writing one header and a table of size
- * classes is flat across the sweep; one that has to walk every piece of a
- * fixed-size arena is not, and the number of pieces is MEM_ARENA_SIZE divided
- * by the granularity, so its cost halves at every step. The arena is the same
- * number of bytes at every step, so the granularity is the only thing this
- * axis carries. w8_native says whether
- * what was measured is the allocator laying out its own arena or the adapter
- * standing in for one.
+/**
+ * @brief W8: arena creation cost against granularity. No setup.
  */
 static void mem_run_w8(void)
 {
@@ -782,16 +652,12 @@ static void mem_run_w8(void)
     const uint32_t i     = MEM_INDEX_OF_S(g);
     const size_t   bytes = MEM_SIZE_OF_S(g);
 
-    /* One creation per step and nothing standing from the step before: the
-     * tear-down drops what the last one made, so every sample is taken from
-     * the same state and an allocator that cannot drop an arena itself does
-     * not accumulate them across the sweep. Untimed. */
+    /* Untimed: drops whatever the last step made. */
     mem_allocator_destroy_arena();
 
     MEM_MEASURE(&mem_w8_create[i], mem_allocator_create_arena(bytes));
 
-    /* Outside the window: the creation is the measurement, and clogging the
-     * store behind it is not part of it. */
+    /* Untimed: not part of the creation measurement. */
     mem_allocator_trim_store();
 
     mem_results.w8_status[i] = MEM_STATUS_OK;
@@ -802,7 +668,12 @@ static void mem_run_w8(void)
   mem_allocator_trim_store();
 }
 
-/* Which of the five gaps an address is, or OTHER, or NULL. */
+/**
+ * @brief Classifies which of the five W7 gaps @p address is.
+ * @param[in] run     Run whose built gap addresses to compare against.
+ * @param[in] address Address returned by the probe.
+ * @return Gap classification, or MEM_GAP_NULL/MEM_GAP_OTHER.
+ */
 static mem_gap_t mem_w7_classify(mem_w7_run_t run, const void *address)
 {
   const mem_w7_result_t *r = &mem_results.w7[run];
@@ -832,23 +703,19 @@ static mem_gap_t mem_w7_classify(mem_w7_run_t run, const void *address)
   return MEM_GAP_OTHER;
 }
 
-/*
- * Builds layout L and frees the five gaps in this run's order. The separators
- * stay allocated and are handed back in chunk[] so the teardown can free them;
- * the five are cleared out of it, because they are gone.
- *
- * Returns false when the layout does not fit, which is what a fixed-size
- * allocator does: the sequence asks for four different request sizes and an
- * arena cut at the smallest of them cannot serve the others.
+/**
+ * @brief Builds W7 layout L and frees its five gaps in @p run's order.
+ * @param[in]  run   Which free order to apply.
+ * @param[out] chunk Returns the separator addresses (gaps cleared to NULL).
+ * @return false if the layout does not fit (fixed-size allocator).
  */
 static bool mem_w7_build(mem_w7_run_t run, void **chunk)
 {
   void *gap[MEM_W7_GAP_COUNT] = {NULL};
   bool  built                 = true;
 
-  /* The smallest request the sequence makes. An allocator of fixed
-   * granularity can serve nothing above it, so this is the only configuration
-   * under which the layout has any chance of being built at all. */
+  /* Smallest request in the sequence; the only granularity that can serve
+   * the whole layout on a fixed-size allocator. */
   mem_allocator_destroy_arena();
   mem_allocator_create_arena(MEM_W7_SEPARATOR);
   mem_allocator_trim_store();
@@ -903,22 +770,12 @@ static bool mem_w7_build(mem_w7_run_t run, void **chunk)
   return true;
 }
 
-/*
- * W7, fit policy. Three runs over the same layout L, differing only in the
- * order the five gaps were freed in and, for C, in one untimed allocate and
- * free before the probe.
- *
- * What a run reports is an address and which gap that address was. Nothing
- * here decides what fit policy the allocator has: that is read off the three
- * classifications together, afterwards, and no single run can carry it.
- *
- * Only A is timed. B and C exist to move the answer rather than to be compared
- * against it, so putting them through the window would only invite three
- * numbers to be read as a series they are not.
- *
- * The harness knows what address each gap started at because it allocated it,
- * so it can map the result without knowing anything about how the allocator
- * lays out its arena.
+/**
+ * @brief W7: runs one probe over layout L for a given free order, recording
+ *        the address and gap it landed in. Only run A (timed) enters the
+ *        window; B and C differ only in free order and, for C, an extra
+ *        untimed probe.
+ * @param[in] run Which W7 run to execute.
  */
 static void mem_run_w7(mem_w7_run_t run)
 {
@@ -987,19 +844,10 @@ static void mem_run_w7(mem_w7_run_t run)
   mem_allocator_trim_store();
 }
 
-/*
- * The guess. Not a measurement and not a property of the allocator: an
- * inference from three addresses, only as good as layout L, and offered next
- * to the three classifications rather than in place of them.
- *
- * The order the rows are tried in is the order they exclude each other. A 128
- * byte request that came out of a 32 byte gap makes every other reading
- * meaningless, and so does a refusal from an arena that visibly holds two gaps
- * large enough. After those two, W7_A against W7_B is asked before anything
- * else, because the only thing that differs between them is which of the two
- * candidates was freed last: an answer that moves with that is an answer taken
- * off a list in insertion order, and where such an allocator happens to land
- * says nothing about addresses.
+/**
+ * @brief Infers the allocator's fit policy from the three W7 classifications.
+ *        Not a measurement; an inference only as good as layout L.
+ * @return Inferred fit policy.
  */
 static mem_fit_guess_t mem_w7_guess(void)
 {
@@ -1052,7 +900,10 @@ static mem_fit_guess_t mem_w7_guess(void)
   return MEM_FIT_GUESS_OTHER;
 }
 
-/* Marks every run of every workload. */
+/**
+ * @brief Sets @p status on every step of every workload.
+ * @param[in] status Status to assign.
+ */
 static void mem_mark_all(mem_status_t status)
 {
   for (uint32_t i = 0U; i < MEM_S_COUNT; i++)
@@ -1081,6 +932,11 @@ static void mem_mark_all(mem_status_t status)
   }
 }
 
+/**
+ * @brief Sets @p status on W5, W6 and all W7 runs (the reclaim-dependent
+ *        workloads).
+ * @param[in] status Status to assign.
+ */
 static void mem_mark_reclaim_dependent(mem_status_t status)
 {
   for (uint32_t j = 0U; j < MEM_S_COUNT; j++)
@@ -1099,8 +955,7 @@ uint32_t mem_harness_run(void)
 {
   mem_probe_capabilities();
 
-  /* An allocator that never returns NULL. Nothing below can be built, because
-   * every state here is built by filling the arena. */
+  /* Allocator never returns NULL; nothing below can be built. */
   if ((mem_results.failures & MEM_FAILURE_UNBOUNDED) != 0U)
   {
     mem_mark_all(MEM_STATUS_UNBOUNDED);
@@ -1115,11 +970,7 @@ uint32_t mem_harness_run(void)
     return mem_results.failures;
   }
 
-  /*
-   * Without a working arena creation nothing here is repeatable: every workload
-   * starts from a known arena and there is no other way to get one. The run
-   * stops.
-   */
+  /* No working create: no workload can get a known arena. Run stops. */
   if (!mem_has(MEM_CAPABILITY_CREATE))
   {
     mem_mark_all(MEM_STATUS_NO_CREATE);
@@ -1134,13 +985,7 @@ uint32_t mem_harness_run(void)
   mem_run_w4_fixed();
   mem_run_w8();
 
-  /*
-   * The fail case for an allocator whose free gives nothing back. W4, W5 and
-   * the three W7 runs all build their state by freeing; with no reclaim that
-   * state is an empty arena wearing the label of a fragmented one, and the
-   * numbers would be wrong rather than merely uninteresting. They are marked
-   * and not taken.
-   */
+  /* No reclaim: W5, W6 and W7 build their state by freeing, so skip them. */
   if (mem_has(MEM_CAPABILITY_RECLAIM))
   {
     mem_run_w5();
