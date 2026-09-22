@@ -58,15 +58,11 @@ BUILD_ASSERT((MEM_SIZE_OF_S(MEM_S_MIN) % sizeof(void *)) == 0U,
 
 static struct k_mem_slab test_slab;
 
-/* The headroom arena: MEM_ARENA_BYTES, the same storage every adapter in the
+/* The arena: MEM_ARENA_SIZE, the same storage every adapter in the
  * comparison declares. A slab keeps no header in front of a piece and no table
  * beside it, so all of it is available to pieces, and the step still cuts only
  * the N(s) pieces the usable memory budget pays for. */
-static uint8_t arena[MEM_ARENA_BYTES] __noinit __aligned(8);
-
-/* What the arena is currently cut into. A request above it is one this
- * allocator cannot serve. */
-static size_t test_granularity = 0U;
+static uint8_t arena[MEM_ARENA_SIZE] __noinit __aligned(8);
 
 /*******************************************************************************
  * Code
@@ -84,8 +80,6 @@ static size_t test_granularity = 0U;
  */
 void mem_allocator_create_arena(size_t granularity)
 {
-  test_granularity = granularity;
-
   (void) k_mem_slab_init(&test_slab, arena, granularity,
                          MS_PIECES(granularity));
 }
@@ -104,34 +98,25 @@ void mem_allocator_destroy_arena(void)
 }
 
 /*
- * Nothing to clog. The buffer is the whole of what the slab was given, so it
+ * Nothing to trim. The buffer is the whole of what the slab was given, so it
  * refuses at the arena's edge on its own.
  */
-void mem_allocator_clog(void)
+void mem_allocator_trim_store(void)
 {
   return;
 }
 
 
 /*
- * A piece is the whole allocation. A request above the granularity is one this
- * allocator cannot serve, and NULL is the only way the interface has of saying
- * so: the workload reads it as full, which at a granularity that cannot hold
- * the request is what full means.
+ * A piece is the whole allocation. Whether a request fits the granularity is
+ * now the harness's question, asked through mem_allocator_is_fixed_size();
+ * this call makes no comparison of its own.
  */
 void *mem_allocator_alloc(size_t bytes)
 {
   void *allocation = NULL;
 
-  if (bytes > test_granularity)
-  {
-    return NULL;
-  }
-
-  if (k_mem_slab_alloc(&test_slab, &allocation, K_NO_WAIT) != 0)
-  {
-    return NULL;
-  }
+  (void) k_mem_slab_alloc(&test_slab, &allocation, K_NO_WAIT);
 
   return allocation;
 }
@@ -198,4 +183,44 @@ size_t mem_allocator_used_bytes(void)
 size_t mem_allocator_fixed_bytes(void)
 {
   return sizeof(test_slab);
+}
+
+/*!
+ * \brief Reports whether this allocator serves nothing larger than the
+ *        granularity it was cut at.
+ *
+ * Always true: a slab is one arena of granularity-sized pieces and can
+ * serve nothing larger.
+ */
+bool mem_allocator_is_fixed_size(void)
+{
+  return true;
+}
+
+/*!
+ * \brief Reports whether mem_allocator_alloc_n() is one call on this
+ *        allocator rather than a stand-in that always refuses.
+ *
+ * Always false: a slab has no batching call of its own beneath
+ * k_mem_slab_alloc(), so this adapter stands in nothing for it.
+ */
+bool mem_allocator_supports_alloc_n(void)
+{
+  return false;
+}
+
+/*!
+ * \brief Allocates count pieces in one call. Without blocking.
+ *
+ * Not supported here: k_mem_slab_alloc() takes one block, so there is no
+ * count API for this adapter to stand in for. Always refuses without
+ * allocating anything.
+ *
+ * \param [in]  count       Unused.
+ * \param [out] allocations Unused.
+ * \return false always.
+ */
+bool mem_allocator_alloc_n(size_t count, void **allocations)
+{
+  return false;
 }

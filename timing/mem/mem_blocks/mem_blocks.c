@@ -37,14 +37,14 @@
  ******************************************************************************/
 
 /* The define takes ilog2 of the piece size. */
-BUILD_ASSERT((MEM_ARENA_BYTES & (MEM_ARENA_BYTES - 1U)) == 0U,
+BUILD_ASSERT((MEM_ARENA_SIZE & (MEM_ARENA_SIZE - 1U)) == 0U,
              "the arena must be a power of two");
 
-/* The pieces the whole headroom arena cuts into at a step, not the N(s) the
- * usable memory budget pays for: R5 hands the allocator all of what the
- * adapter declares, and the fill stops on its count rather than on the pool
- * running out. */
-#define MB_BLOCKS_AT(s_) (MEM_ARENA_BYTES / (1U << (s_)))
+/* The pieces the whole arena cuts into at a step, not the N(s) the usable
+ * memory budget pays for: R5 hands the allocator all of what the adapter
+ * declares, and the fill stops on its count rather than on the pool running
+ * out. */
+#define MB_BLOCKS_AT(s_) (MEM_ARENA_SIZE / (1U << (s_)))
 
 /*
  * Which pool a granularity picks, as one count-trailing-zeros rather than a
@@ -58,10 +58,10 @@ BUILD_ASSERT((MEM_ARENA_BYTES & (MEM_ARENA_BYTES - 1U)) == 0U,
  * Variables
  ******************************************************************************/
 
-/* The headroom arena: MEM_ARENA_BYTES, the same storage every adapter in the
+/* The arena: MEM_ARENA_SIZE, the same storage every adapter in the
  * comparison declares. The bitmap is beside the buffer rather than inside it,
  * so all of the array is available to pieces, as it is for the slab. */
-static uint8_t arena[MEM_ARENA_BYTES] __noinit __aligned(8);
+static uint8_t arena[MEM_ARENA_SIZE] __noinit __aligned(8);
 
 /* One pool per step of the sweep, 2^MEM_S_MIN to 2^MEM_S_MAX bytes a piece. */
 SYS_MEM_BLOCKS_DEFINE_STATIC_WITH_EXT_BUF(pool_s3, 8, MB_BLOCKS_AT(3), arena);
@@ -79,9 +79,8 @@ static sys_mem_blocks_t *const test_pool[MEM_S_COUNT] = {
   &pool_s7, &pool_s8, &pool_s9, &pool_s10,
 };
 
-/* The pool the arena is currently cut into, and the piece size it cuts at. */
-static sys_mem_blocks_t *test_live        = &pool_s3;
-static size_t            test_granularity = 0U;
+/* The pool the arena is currently cut into. */
+static sys_mem_blocks_t *test_live = &pool_s3;
 
 /*******************************************************************************
  * Code
@@ -101,8 +100,7 @@ static size_t            test_granularity = 0U;
  */
 void mem_allocator_create_arena(size_t granularity)
 {
-  test_granularity = granularity;
-  test_live        = test_pool[MB_STEP_OF(granularity)];
+  test_live = test_pool[MB_STEP_OF(granularity)];
 
   for (uint32_t i = 0U; i < test_live->bitmap->num_bundles; i++)
   {
@@ -125,32 +123,25 @@ void mem_allocator_destroy_arena(void)
 }
 
 /*
- * Nothing to clog. The buffer is the whole of what the pool was given, so it
+ * Nothing to trim. The buffer is the whole of what the pool was given, so it
  * refuses at the arena's edge on its own.
  */
-void mem_allocator_clog(void)
+void mem_allocator_trim_store(void)
 {
   return;
 }
 
 
 /*
- * A request above the granularity is one this allocator cannot serve, and NULL
- * is the only way the interface has of saying so.
+ * Whether a request fits the granularity is now the harness's question,
+ * asked through mem_allocator_is_fixed_size(); this call makes no comparison
+ * of its own.
  */
 void *mem_allocator_alloc(size_t bytes)
 {
   void *allocation = NULL;
 
-  if (bytes > test_granularity)
-  {
-    return NULL;
-  }
-
-  if (sys_mem_blocks_alloc(test_live, 1U, &allocation) != 0)
-  {
-    return NULL;
-  }
+  (void) sys_mem_blocks_alloc(test_live, 1U, &allocation);
 
   return allocation;
 }
@@ -232,4 +223,44 @@ size_t mem_allocator_fixed_bytes(void)
 {
   return sizeof(*test_live) + sizeof(sys_bitarray_t)
          + ((size_t) test_live->bitmap->num_bundles * sizeof(uint32_t));
+}
+
+/*!
+ * \brief Reports whether this allocator serves nothing larger than the
+ *        granularity it was cut at.
+ *
+ * A pool is one arena of granularity-sized pieces and can serve nothing
+ * larger, so it answers true, the same as the slab.
+ */
+bool mem_allocator_is_fixed_size(void)
+{
+  return true;
+}
+
+/*!
+ * \brief Reports whether mem_allocator_alloc_n() is one call on this
+ *        allocator rather than a stand-in that always refuses.
+ *
+ * sys_mem_blocks_alloc() takes a count on its own, so this adapter answers
+ * true.
+ */
+bool mem_allocator_supports_alloc_n(void)
+{
+  return true;
+}
+
+/*!
+ * \brief Allocates count pieces in one call. Without blocking.
+ *
+ * One call, asking the currently selected pool for count pieces in the same
+ * request.
+ *
+ * \param [in]  count       How many pieces to allocate.
+ * \param [out] allocations Filled with count pointers on success, one per
+ *                          piece.
+ * \return true on success, false when the pool refused.
+ */
+bool mem_allocator_alloc_n(size_t count, void **allocations)
+{
+  return sys_mem_blocks_alloc(test_live, count, allocations) == 0;
 }
