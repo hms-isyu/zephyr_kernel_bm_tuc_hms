@@ -58,11 +58,11 @@ BMTH_measurement_series_t mem_w6_free[MEM_S_COUNT];
 BMTH_measurement_series_t mem_w8_create[MEM_S_COUNT];
 BMTH_measurement_series_t mem_w7a_alloc;
 
-/* W4 and W5 take one sample per freed index, so their series need somewhere to
+/* W5 and W6 take one sample per freed index, so their series need somewhere to
  * put the whole sweep. Every other workload takes one sample per run and reads
  * out of last_value. */
-static uint32_t mem_w4_buffer[MEM_S_COUNT][MEM_HOLES_MAX];
 static uint32_t mem_w5_buffer[MEM_S_COUNT][MEM_HOLES_MAX];
+static uint32_t mem_w6_buffer[MEM_S_COUNT][MEM_HOLES_MAX];
 
 /* Written by the measured call, and file scope, so the window carries the
  * INSIDE_FUNCTION_FILE_SCOPE_VARS artefact the series is initialized with and
@@ -1196,10 +1196,10 @@ void mem_harness_init(void)
   for (uint32_t j = 0U; j < MEM_S_COUNT; j++)
   {
     BMTH_mseries_initialize(
-      &mem_w5_free[j], MEM_HOLES_MAX, mem_w4_buffer[j],
+      &mem_w5_free[j], MEM_HOLES_MAX, mem_w5_buffer[j],
       BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
     BMTH_mseries_initialize(
-      &mem_w6_free[j], MEM_HOLES_MAX, mem_w5_buffer[j],
+      &mem_w6_free[j], MEM_HOLES_MAX, mem_w6_buffer[j],
       BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
   }
 
