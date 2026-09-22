@@ -400,47 +400,42 @@ static void mem_run_w3(void)
 }
 
 /*
- * W3, time to spend the usable memory budget. One window over the whole loop,
- * so the number is the aggregate cost of the N(s) allocations the budget pays
- * for at that request size. Divided by w4_allocations it is the average
- * allocation over a run that starts on an empty arena and finishes on one
- * holding the whole budget, which is the quantity W1 cannot give: W1 only ever
- * allocates out of a pristine arena.
+ * W4, aggregate allocate for the requested space. One window over the whole
+ * loop, so the number is the aggregate cost of the N(s) allocations the
+ * requested space pays for at that request size. Divided by w4_allocations it
+ * is the average allocation over a run that starts on an empty arena and
+ * finishes on one holding the whole requested space, which is the quantity W1
+ * cannot give: W1 only ever allocates out of a pristine arena.
  *
- * No refusal is inside the number. The loop stops on its count, at N(s)
- * successful allocations, so every step measures the same N(s) allocations on
- * every allocator and the rows compare call for call.
+ * The loop stops on whichever comes first: N(s) = MEM_REQUESTED_SPACE / 2^s
+ * successful allocations, or a refusal. Both are recorded, the count reached
+ * and whether the stop was a refusal. On the arena a refusal is not expected,
+ * so it sets MEM_FAILURE_ARENA_SIZE, but the sample stays: a short run still
+ * measured a real fill of a real arena and dropping it would be dropping a
+ * data point.
  *
- * Inside the window: the loop's own compare and increment, one division before
- * it, and the two stores mem_fill_blind() makes once it is over. Nothing else
- * - it keeps no bookkeeping, which is why the arena is emptied here by
- * creating it again and not by freeing.
+ * Inside the window: the loop's own compare, the allocate call and the
+ * increment. Nothing else - the pointer each allocate returns is kept in one
+ * scratch local and discarded, never in an array, which is why the arena is
+ * emptied afterwards by creating it again and not by freeing.
  *
- * Every record this workload takes beyond its own number, the real arena, the
- * total used space, the fixed arena cost and the count check, is taken here
- * and nowhere else. W3 is the only workload the sizing of the arena can
- * invalidate, it already creates once per step, and the count the check reads
- * is one it already records. W6 also creates once per step, but its window has
- * to stay the one call, so nothing is read around it. All three byte figures
- * are read outside the window, two of them after it closes.
- *
- * The check is against N(s) = MEM_REQUESTED_SPACE / 2^s, the allocations a step
- * makes, and it applies to every adapter. N(s) is the invariant of the whole
- * directory; the fill loop now bounds itself by it, so what the check reads is
- * whether the loop ran to the end, and a count below it means an allocation
- * was refused on an arena sized so that none can be.
- *
- * A short count is recorded, marks the step and the mask, and the run carries
- * on. A short step still measured a real fill of a real arena and dropping it
- * would be dropping a data point: the measured value and the recorded count
- * are what they would have been either way.
+ * The total used space is read once the window is closed and the step's
+ * allocations are still live, which is the one moment it can be taken. The
+ * fixed arena cost does not move with them and is read beside it. The used
+ * space must fall between the requested space and the arena size; outside
+ * that range it sets MEM_FAILURE_SPACE_INVARIANT.
  */
 static void mem_run_w4(void)
 {
   for (uint32_t s = MEM_S_MIN; s <= MEM_S_MAX; s++)
   {
-    const uint32_t i     = MEM_INDEX_OF_S(s);
-    const size_t   bytes = MEM_SIZE_OF_S(s);
+    const uint32_t i      = MEM_INDEX_OF_S(s);
+    const size_t   bytes  = MEM_SIZE_OF_S(s);
+    const uint32_t target = (uint32_t) (MEM_REQUESTED_SPACE / bytes);
+    uint32_t       count  = 0U;
+    bool           full   = false;
+    void          *scratch;
+    uint32_t       used;
 
     mem_allocator_destroy_arena();
     mem_allocator_create_arena(bytes);
@@ -451,36 +446,45 @@ static void mem_run_w4(void)
      * target. */
     mem_results.real_arena[i] = (uint32_t) mem_allocator_arena_bytes();
 
-    MEM_MEASURE(&mem_w4_alloc[i], mem_fill_blind(bytes));
+    MEM_MEASURE(&mem_w4_alloc[i],
+                while (count < target)
+                {
+                  scratch = mem_allocator_alloc(bytes);
+
+                  if (scratch == NULL)
+                  {
+                    full = true;
+                    break;
+                  }
+
+                  count++;
+                });
 
     /* The window is closed and the step's allocations are still live, which is
      * the one moment the total used space can be read. The fixed arena cost
      * does not move with them and is read beside it. */
-    mem_results.w4_used_bytes[i] = (uint32_t) mem_allocator_used_bytes();
+    used                         = (uint32_t) mem_allocator_used_bytes();
+    mem_results.w4_used_bytes[i] = used;
     mem_results.fixed_bytes[i]   = (uint32_t) mem_allocator_fixed_bytes();
 
-    mem_results.w4_allocations[i] = mem_fill_count;
+    mem_results.w4_allocations[i]    = count;
+    mem_results.w4_count_expected[i] = (count == target) && !full;
+    mem_results.w4_status[i]         = MEM_STATUS_OK;
 
-    mem_results.w4_count_expected[i] =
-      (mem_fill_count == (uint32_t) (MEM_ARENA_SIZE >> s));
-
-    if (mem_fill_bounded)
+    /* A stop on full is not expected on this arena: the multiplier is there
+     * to make it impossible. The step is marked, and the sample it took
+     * stays. */
+    if (full)
     {
-      mem_results.w4_status[i] = MEM_STATUS_OK;
-    }
-    else
-    {
-      mem_results.w4_status[i] = MEM_STATUS_UNBOUNDED;
-      mem_results.failures |= MEM_FAILURE_UNBOUNDED;
-    }
-
-    /* A count below N(s) means an allocation was refused, which the arena
-     * multiplier is there to make impossible. The step is marked, and the
-     * sample it took stays. */
-    if (!mem_results.w4_count_expected[i])
-    {
-      mem_results.w4_status[i] = MEM_STATUS_SETUP_FAILED;
       mem_results.failures |= MEM_FAILURE_ARENA_SIZE;
+    }
+
+    /* The used space must not fall short of the requested space or run past
+     * the arena size. Either way the invariant is marked. */
+    if ((used < (uint32_t) MEM_REQUESTED_SPACE)
+        || (used > (uint32_t) MEM_ARENA_SIZE))
+    {
+      mem_results.failures |= MEM_FAILURE_SPACE_INVARIANT;
     }
 
     mem_allocator_destroy_arena();
