@@ -67,11 +67,6 @@ static uint32_t mem_w5_buffer[MEM_S_COUNT][MEM_HOLES_MAX];
  * the call cannot be optimized away. */
 static void *mem_allocation = NULL;
 
-/* Written at the end of mem_fill_blind(), which W3 measures, so they are file
- * scope for the same reason. */
-static uint32_t mem_fill_count   = 0U;
-static bool     mem_fill_bounded = true;
-
 /* False when the allocator served nothing at all at the smallest request, in
  * which case there is no capability to establish and no workload to run. */
 static bool mem_probe_serves = false;
@@ -143,26 +138,12 @@ static bool mem_has(uint32_t capability)
   return (mem_results.capabilities & capability) != 0U;
 }
 
-static void mem_fill_blind(size_t bytes)
-{
-  const uint32_t limit = (uint32_t) (MEM_REQUESTED_SPACE / bytes);
-  uint32_t       n     = 0U;
-
-  while ((n < limit) && (mem_allocator_alloc(bytes) != NULL))
-  {
-    n++;
-  }
-
-  mem_fill_count   = n;
-  mem_fill_bounded = (n <= MEM_ALLOCATIONS_MAX);
-}
-
 /*
  * Allocates the usable memory budget and keeps every allocation by index.
  * Never inside a window.
  *
- * Stops on the same count as mem_fill_blind(), at N(s) successful allocations,
- * and does not call allocate again. A NULL before that leaves mem_held_count
+ * Stops at N(s) successful allocations, and does not call allocate again. A
+ * NULL before that leaves mem_held_count
  * below N(s), which is what the caller checks; the return value stays what it
  * was, false only when the allocator handed out more than the array can hold.
  */
