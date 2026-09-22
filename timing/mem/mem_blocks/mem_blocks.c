@@ -150,10 +150,12 @@ size_t mem_allocator_arena_bytes(void)
 }
 
 /**
- * @brief Returns the space in use, counted via a bitmap popcount so no
- *        stats counter is added to the allocate or free path.
+ * @brief Returns the space in use, fixed bookkeeping included, counted via
+ *        a bitmap popcount so no stats counter is added to the allocate or
+ *        free path.
  *
- * @return Pieces in use times piece size, in bytes.
+ * @return Pieces in use times piece size, plus the pool's fixed cost, in
+ *         bytes.
  */
 size_t mem_allocator_used_bytes(void)
 {
@@ -166,7 +168,7 @@ size_t mem_allocator_used_bytes(void)
     return 0U;
   }
 
-  return count << test_live->info.blk_sz_shift;
+  return (count << test_live->info.blk_sz_shift) + mem_allocator_fixed_bytes();
 }
 
 /**

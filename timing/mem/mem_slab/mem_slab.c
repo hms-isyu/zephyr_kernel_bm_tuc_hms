@@ -126,13 +126,15 @@ size_t mem_allocator_arena_bytes(void)
 }
 
 /**
- * @brief Returns the space in use.
+ * @brief Returns the space in use, fixed bookkeeping included.
  *
- * @return Pieces in use times piece size, in bytes.
+ * @return Pieces in use times piece size, plus the slab's fixed cost, in
+ *         bytes.
  */
 size_t mem_allocator_used_bytes(void)
 {
-  return (size_t) test_slab.info.num_used * test_slab.info.block_size;
+  return (size_t) test_slab.info.num_used * test_slab.info.block_size
+         + mem_allocator_fixed_bytes();
 }
 
 /**
