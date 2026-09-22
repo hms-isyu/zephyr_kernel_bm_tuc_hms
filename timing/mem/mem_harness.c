@@ -52,6 +52,7 @@ BMTH_measurement_series_t mem_w1_alloc[MEM_S_COUNT];
 BMTH_measurement_series_t mem_w2_alloc[MEM_S_COUNT];
 BMTH_measurement_series_t mem_w3_free[MEM_S_COUNT];
 BMTH_measurement_series_t mem_w4_alloc[MEM_S_COUNT];
+BMTH_measurement_series_t mem_w4_fixed_alloc[MEM_S_COUNT];
 BMTH_measurement_series_t mem_w5_free[MEM_S_COUNT];
 BMTH_measurement_series_t mem_w6_free[MEM_S_COUNT];
 BMTH_measurement_series_t mem_w8_create[MEM_S_COUNT];
@@ -67,6 +68,13 @@ static uint32_t mem_w5_buffer[MEM_S_COUNT][MEM_HOLES_MAX];
  * INSIDE_FUNCTION_FILE_SCOPE_VARS artefact the series is initialized with and
  * the call cannot be optimized away. */
 static void *mem_allocation = NULL;
+
+/* Filled by the single alloc_n() call W4_FIXED_SIZE measures, and the
+ * captured return beside it, both file scope so the window carries the
+ * INSIDE_FUNCTION_FILE_SCOPE_VARS artefact. MEM_HOLES_MAX is c(MEM_S_MIN),
+ * the largest count any step needs. */
+static void *mem_alloc_n_buffer[MEM_HOLES_MAX];
+static bool  mem_alloc_n_ok = false;
 
 /* False when the allocator served nothing at all at the smallest request, in
  * which case there is no capability to establish and no workload to run. */
@@ -556,6 +564,48 @@ static void mem_run_w4(void)
     {
       mem_results.capabilities &= ~(uint32_t) MEM_CAPABILITY_USED_BYTES;
     }
+  }
+
+  mem_allocator_destroy_arena();
+  mem_allocator_create_arena(MEM_SIZE_OF_S(MEM_S_MIN));
+  mem_allocator_trim_store();
+}
+
+/*
+ * W4_FIXED_SIZE, the same requested space in one alloc_n() call. Same c(s)
+ * allocations of 2^s as W4, but requested through a single count-taking call
+ * instead of a loop, so the window holds exactly one call.
+ *
+ * Only applicable where the allocator supports alloc_n(); everywhere else the
+ * step is marked NOT_APPLICABLE and no sample is taken.
+ */
+static void mem_run_w4_fixed(void)
+{
+  for (uint32_t s = MEM_S_MIN; s <= MEM_S_MAX; s++)
+  {
+    const uint32_t i     = MEM_INDEX_OF_S(s);
+    const size_t   bytes = MEM_SIZE_OF_S(s);
+    const uint32_t count = (uint32_t) (MEM_REQUESTED_SPACE / bytes);
+
+    if (!mem_allocator_supports_alloc_n())
+    {
+      mem_results.w4_fixed_status[i] = MEM_STATUS_NOT_APPLICABLE;
+      continue;
+    }
+
+    mem_allocator_destroy_arena();
+    mem_allocator_create_arena(bytes);
+    mem_allocator_trim_store();
+
+    MEM_MEASURE(&mem_w4_fixed_alloc[i],
+                mem_alloc_n_ok
+                = mem_allocator_alloc_n(count, mem_alloc_n_buffer));
+
+    mem_results.w4_fixed_status[i] = MEM_STATUS_OK;
+
+    mem_allocator_destroy_arena();
+    mem_allocator_create_arena(bytes);
+    mem_allocator_trim_store();
   }
 
   mem_allocator_destroy_arena();
@@ -1069,9 +1119,11 @@ static void mem_mark_all(mem_status_t status)
 {
   for (uint32_t i = 0U; i < MEM_S_COUNT; i++)
   {
-    mem_results.w1_status[i] = status;
-    mem_results.w3_status[i] = status;
-    mem_results.w4_status[i] = status;
+    mem_results.w1_status[i]       = status;
+    mem_results.w2_status[i]       = status;
+    mem_results.w3_status[i]       = status;
+    mem_results.w4_status[i]       = status;
+    mem_results.w4_fixed_status[i] = status;
   }
 
   for (uint32_t j = 0U; j < MEM_S_COUNT; j++)
@@ -1141,6 +1193,7 @@ uint32_t mem_harness_run(void)
   mem_run_w2();
   mem_run_w3();
   mem_run_w4();
+  mem_run_w4_fixed();
   mem_run_w8();
 
   /*
@@ -1193,6 +1246,9 @@ void mem_harness_init(void)
       BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
     BMTH_mseries_initialize(
       &mem_w4_alloc[i], 0, NULL,
+      BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
+    BMTH_mseries_initialize(
+      &mem_w4_fixed_alloc[i], 0, NULL,
       BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
     BMTH_mseries_initialize(
       &mem_w8_create[i], 0, NULL,

@@ -214,6 +214,9 @@ typedef struct mem_results_t
     w4_allocations[MEM_S_COUNT]; /**< @brief Number of allocations held. */
   bool w4_count_expected[MEM_S_COUNT]; /**< @brief True if count matched N(s). */
 
+  mem_status_t w4_fixed_status
+    [MEM_S_COUNT]; /**< @brief Status of W4_FIXED_SIZE alloc_n. */
+
   mem_status_t w5_status[MEM_S_COUNT];  /**< @brief Status of W4 free. */
   uint32_t w5_allocations[MEM_S_COUNT]; /**< @brief W4 allocations created. */
   uint32_t w5_holes[MEM_S_COUNT]; /**< @brief Measured W4 frees (holes). */
@@ -235,6 +238,7 @@ extern BMTH_measurement_series_t mem_w1_alloc[MEM_S_COUNT];
 extern BMTH_measurement_series_t mem_w2_alloc[MEM_S_COUNT];
 extern BMTH_measurement_series_t mem_w3_free[MEM_S_COUNT];
 extern BMTH_measurement_series_t mem_w4_alloc[MEM_S_COUNT];
+extern BMTH_measurement_series_t mem_w4_fixed_alloc[MEM_S_COUNT];
 extern BMTH_measurement_series_t mem_w5_free[MEM_S_COUNT];
 extern BMTH_measurement_series_t mem_w6_free[MEM_S_COUNT];
 extern BMTH_measurement_series_t mem_w8_create[MEM_S_COUNT];
