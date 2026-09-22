@@ -44,7 +44,7 @@
 
 #ifndef MEM_ARENA_MULTIPLIER
 /** @brief Factor to calculate total arena size, ensuring bookkeeping fits. */
-#define MEM_ARENA_MULTIPLIER (4U)
+#define MEM_ARENA_MULTIPLIER (5U)
 #endif
 
 /** @brief Total size of the declared arena in bytes. */
