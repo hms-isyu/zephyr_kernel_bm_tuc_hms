@@ -47,22 +47,22 @@
  * K_HEAP_DEFINE(_system_heap, Z_HEAP_MIN_SIZE_FOR(K_HEAP_MEM_POOL_SIZE)), so
  * this Kconfig number is the payload argument that array is sized through.
  * k_malloc cannot declare its own storage, the kernel owns it, so this symbol
- * is how k_malloc gets the same headroom arena the other two heap adapters
- * declare directly. prj.conf cannot hold a macro, so this assert is what
- * enforces the agreement.
+ * is how k_malloc gets the same arena the other two heap adapters declare
+ * directly. prj.conf cannot hold a macro, so this assert is what enforces the
+ * agreement.
  *
  * At least, not equal: the kernel's array is sized through
  * Z_HEAP_MIN_SIZE_FOR(), which puts chunk 0 and the bucket table on top of the
  * payload argument, so the array is never smaller than the symbol. What the
- * comparison needs is that no step can run the arena out, and headroom is what
- * guarantees that.
+ * comparison needs is that no step can run the arena out, and the arena
+ * multiplier is what guarantees that.
  *
  * The Kconfig default is 0, which compiles k_malloc() out of the image
  * entirely.
  */
-BUILD_ASSERT(CONFIG_HEAP_MEM_POOL_SIZE >= MEM_ARENA_BYTES,
+BUILD_ASSERT(CONFIG_HEAP_MEM_POOL_SIZE >= MEM_ARENA_SIZE,
              "set CONFIG_HEAP_MEM_POOL_SIZE in prj.conf to at least "
-             "MEM_ARENA_BYTES, which is 4096 at a headroom of 4");
+             "MEM_ARENA_SIZE, which is 4096 at a multiplier of 4");
 
 /*******************************************************************************
  * Variables
@@ -91,8 +91,8 @@ extern struct k_heap _system_heap;
  * makes.
  *
  * The length is init_bytes, the whole of the kernel's array, at every step.
- * The arena is no longer a function of the step: it is the headroom arena for
- * all three heap adapters, and what keeps the steps comparable is that W3, W4
+ * The arena is no longer a function of the step: it is the arena for all
+ * three heap adapters, and what keeps the steps comparable is that W3, W4
  * and W5 stop after N(s) allocations rather than where the arena ran out.
  *
  * init_bytes has to be read before the creation overwrites nothing: the
@@ -126,11 +126,11 @@ void mem_allocator_destroy_arena(void)
 }
 
 /*
- * Nothing to clog. The arena the creation handed over is the whole of what
+ * Nothing to trim. The arena the creation handed over is the whole of what
  * k_malloc has, there is no store behind the system heap for it to take more
  * from, so its capacity is its own.
  */
-void mem_allocator_clog(void)
+void mem_allocator_trim_store(void)
 {
   return;
 }
@@ -176,5 +176,45 @@ size_t mem_allocator_used_bytes(void)
 size_t mem_allocator_fixed_bytes(void)
 {
   return mem_zephyr_heap_fixed_bytes(&_system_heap.heap);
+}
+
+/*!
+ * \brief Reports whether this allocator serves nothing larger than the
+ *        granularity it was cut at.
+ *
+ * Always false: a heap carves the arena on demand and has no granularity to
+ * be bounded by.
+ */
+bool mem_allocator_is_fixed_size(void)
+{
+  return false;
+}
+
+/*!
+ * \brief Reports whether mem_allocator_alloc_n() is one call on this
+ *        allocator rather than a stand-in that always refuses.
+ *
+ * Always false: this adapter has no batched allocation call of its own.
+ */
+bool mem_allocator_supports_alloc_n(void)
+{
+  return false;
+}
+
+/*!
+ * \brief Allocates count pieces in one call. Without blocking.
+ *
+ * Not supported here: always refuses without allocating anything.
+ *
+ * \param [in]  count       Unused.
+ * \param [out] allocations Unused.
+ * \return false always.
+ */
+bool mem_allocator_alloc_n(size_t count, void **allocations)
+{
+  (void) count;
+  (void) allocations;
+
+  return false;
 }
 

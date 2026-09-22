@@ -550,10 +550,10 @@ static void mem_run_w3(void)
  *
  * Odd indices, so every freed allocation keeps a live one on each side and no
  * two holes are adjacent. The last allocation is excluded because what the
- * fill did not spend sits next to it: the arena is oversized by
- * MEM_ARENA_HEADROOM, so free space past the last allocation is there at every
- * step, and freeing it would coalesce where none of the others do and put one
- * different sample in the middle of the series.
+ * fill did not spend sits next to it: the arena is MEM_ARENA_MULTIPLIER
+ * times the requested space, so free space past the last allocation is there
+ * at every step, and freeing it would coalesce where none of the others do
+ * and put one different sample in the middle of the series.
  *
  * Fewer than three allocations leaves no odd index below the last one, so
  * there is nothing to sweep. That is expected at the top of the range and is
@@ -765,7 +765,7 @@ static void mem_run_w5(void)
  * The granularity is the axis because that is what the work responds to. An
  * allocator that lays its arena out by writing one header and a table of size
  * classes is flat across the sweep; one that has to walk every piece of a
- * fixed-size arena is not, and the number of pieces is MEM_ARENA_BYTES divided
+ * fixed-size arena is not, and the number of pieces is MEM_ARENA_SIZE divided
  * by the granularity, so its cost halves at every step. The arena is the same
  * number of bytes at every step, so the granularity is the only thing this
  * axis carries. w6_native says whether
@@ -1055,7 +1055,7 @@ static void mem_mark_all(mem_status_t status)
     mem_results.w3_status[i] = status;
   }
 
-  for (uint32_t j = 0U; j < MEM_S_SWEEP_COUNT; j++)
+  for (uint32_t j = 0U; j < MEM_S_COUNT; j++)
   {
     mem_results.w4_status[j] = status;
     mem_results.w5_status[j] = status;
@@ -1074,7 +1074,7 @@ static void mem_mark_all(mem_status_t status)
 
 static void mem_mark_reclaim_dependent(mem_status_t status)
 {
-  for (uint32_t j = 0U; j < MEM_S_SWEEP_COUNT; j++)
+  for (uint32_t j = 0U; j < MEM_S_COUNT; j++)
   {
     mem_results.w4_status[j] = status;
     mem_results.w5_status[j] = status;
@@ -1176,7 +1176,7 @@ void mem_harness_init(void)
       BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
   }
 
-  for (uint32_t j = 0U; j < MEM_S_SWEEP_COUNT; j++)
+  for (uint32_t j = 0U; j < MEM_S_COUNT; j++)
   {
     BMTH_mseries_initialize(
       &mem_w4_free[j], MEM_HOLES_MAX, mem_w4_buffer[j],

@@ -34,10 +34,10 @@
 static struct k_heap test_heap;
 
 /* k_heap_init() rather than K_HEAP_DEFINE(), so this line is identical to the
- * one in the sys_heap adapter: same MEM_ARENA_BYTES, same alignment, same
- * section. The headroom arena is the same storage at every step and for every
+ * one in the sys_heap adapter: same MEM_ARENA_SIZE, same alignment, same
+ * section. The arena is the same storage at every step and for every
  * allocator in the comparison. */
-static uint8_t arena[MEM_ARENA_BYTES] __noinit __aligned(8);
+static uint8_t arena[MEM_ARENA_SIZE] __noinit __aligned(8);
 
 /*******************************************************************************
  * Code
@@ -80,10 +80,10 @@ void mem_allocator_destroy_arena(void)
 }
 
 /*
- * Nothing to clog. The arena the creation handed over is the whole of what
+ * Nothing to trim. The arena the creation handed over is the whole of what
  * this allocator was given, so its capacity is its own.
  */
-void mem_allocator_clog(void)
+void mem_allocator_trim_store(void)
 {
   return;
 }
@@ -127,5 +127,45 @@ size_t mem_allocator_used_bytes(void)
 size_t mem_allocator_fixed_bytes(void)
 {
   return mem_zephyr_heap_fixed_bytes(&test_heap.heap);
+}
+
+/*!
+ * \brief Reports whether this allocator serves nothing larger than the
+ *        granularity it was cut at.
+ *
+ * Always false: a heap carves the arena on demand and has no granularity to
+ * be bounded by.
+ */
+bool mem_allocator_is_fixed_size(void)
+{
+  return false;
+}
+
+/*!
+ * \brief Reports whether mem_allocator_alloc_n() is one call on this
+ *        allocator rather than a stand-in that always refuses.
+ *
+ * Always false: this adapter has no batched allocation call of its own.
+ */
+bool mem_allocator_supports_alloc_n(void)
+{
+  return false;
+}
+
+/*!
+ * \brief Allocates count pieces in one call. Without blocking.
+ *
+ * Not supported here: always refuses without allocating anything.
+ *
+ * \param [in]  count       Unused.
+ * \param [out] allocations Unused.
+ * \return false always.
+ */
+bool mem_allocator_alloc_n(size_t count, void **allocations)
+{
+  (void) count;
+  (void) allocations;
+
+  return false;
 }
 

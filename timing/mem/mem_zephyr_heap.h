@@ -17,9 +17,9 @@
  * All three run the same allocation algorithm underneath, so the space figures
  * are read the same way for all three and the kernel wrapper stays the only
  * thing that differs between them. Every figure here is read out of the
- * allocator's own state after a fill, never computed from MEM_ARENA_BYTES,
- * MEM_ARENA_SIZE or the granularity: a figure that is inferred rather than
- * measured is not a measurement.
+ * allocator's own state after a fill, never computed from MEM_ARENA_SIZE or
+ * the granularity: a figure that is inferred rather than measured is not a
+ * measurement.
  *
  * None of these is ever called from inside a measurement window. They walk the
  * heap, which costs time proportional to the number of chunks, and a walk
