@@ -49,11 +49,11 @@ static BMTH_time_marker_t mem_stop_time  = 0U;
 mem_results_t mem_results;
 
 BMTH_measurement_series_t mem_w1_alloc[MEM_S_COUNT];
-BMTH_measurement_series_t mem_w2_free[MEM_S_COUNT];
-BMTH_measurement_series_t mem_w3_fill[MEM_S_COUNT];
-BMTH_measurement_series_t mem_w4_free[MEM_S_COUNT];
+BMTH_measurement_series_t mem_w3_free[MEM_S_COUNT];
+BMTH_measurement_series_t mem_w4_alloc[MEM_S_COUNT];
 BMTH_measurement_series_t mem_w5_free[MEM_S_COUNT];
-BMTH_measurement_series_t mem_w6_create[MEM_S_COUNT];
+BMTH_measurement_series_t mem_w6_free[MEM_S_COUNT];
+BMTH_measurement_series_t mem_w8_create[MEM_S_COUNT];
 BMTH_measurement_series_t mem_w7a_alloc;
 
 /* W4 and W5 take one sample per freed index, so their series need somewhere to
@@ -369,7 +369,7 @@ static void mem_run_w1(void)
  * as a failed setup and sets MEM_FAILURE_ARENA_SIZE rather than being skipped
  * silently.
  */
-static void mem_run_w2(void)
+static void mem_run_w3(void)
 {
   for (uint32_t s = MEM_S_MIN; s <= MEM_S_MAX; s++)
   {
@@ -383,15 +383,15 @@ static void mem_run_w2(void)
 
     if (mem_allocation == NULL)
     {
-      mem_results.w2_status[i] = MEM_STATUS_SETUP_FAILED;
+      mem_results.w3_status[i] = MEM_STATUS_SETUP_FAILED;
       mem_results.failures |= MEM_FAILURE_ARENA_SIZE;
       continue;
     }
 
-    MEM_MEASURE(&mem_w2_free[i], mem_allocator_free(mem_allocation));
+    MEM_MEASURE(&mem_w3_free[i], mem_allocator_free(mem_allocation));
 
     mem_allocation           = NULL;
-    mem_results.w2_status[i] = MEM_STATUS_OK;
+    mem_results.w3_status[i] = MEM_STATUS_OK;
   }
 
   mem_allocator_destroy_arena();
@@ -402,7 +402,7 @@ static void mem_run_w2(void)
 /*
  * W3, time to spend the usable memory budget. One window over the whole loop,
  * so the number is the aggregate cost of the N(s) allocations the budget pays
- * for at that request size. Divided by w3_allocations it is the average
+ * for at that request size. Divided by w4_allocations it is the average
  * allocation over a run that starts on an empty arena and finishes on one
  * holding the whole budget, which is the quantity W1 cannot give: W1 only ever
  * allocates out of a pristine arena.
@@ -435,7 +435,7 @@ static void mem_run_w2(void)
  * would be dropping a data point: the measured value and the recorded count
  * are what they would have been either way.
  */
-static void mem_run_w3(void)
+static void mem_run_w4(void)
 {
   for (uint32_t s = MEM_S_MIN; s <= MEM_S_MAX; s++)
   {
@@ -451,35 +451,35 @@ static void mem_run_w3(void)
      * target. */
     mem_results.real_arena[i] = (uint32_t) mem_allocator_arena_bytes();
 
-    MEM_MEASURE(&mem_w3_fill[i], mem_fill_blind(bytes));
+    MEM_MEASURE(&mem_w4_alloc[i], mem_fill_blind(bytes));
 
     /* The window is closed and the step's allocations are still live, which is
      * the one moment the total used space can be read. The fixed arena cost
      * does not move with them and is read beside it. */
-    mem_results.w3_used_bytes[i] = (uint32_t) mem_allocator_used_bytes();
+    mem_results.w4_used_bytes[i] = (uint32_t) mem_allocator_used_bytes();
     mem_results.fixed_bytes[i]   = (uint32_t) mem_allocator_fixed_bytes();
 
-    mem_results.w3_allocations[i] = mem_fill_count;
+    mem_results.w4_allocations[i] = mem_fill_count;
 
-    mem_results.w3_count_expected[i] =
+    mem_results.w4_count_expected[i] =
       (mem_fill_count == (uint32_t) (MEM_ARENA_SIZE >> s));
 
     if (mem_fill_bounded)
     {
-      mem_results.w3_status[i] = MEM_STATUS_OK;
+      mem_results.w4_status[i] = MEM_STATUS_OK;
     }
     else
     {
-      mem_results.w3_status[i] = MEM_STATUS_UNBOUNDED;
+      mem_results.w4_status[i] = MEM_STATUS_UNBOUNDED;
       mem_results.failures |= MEM_FAILURE_UNBOUNDED;
     }
 
     /* A count below N(s) means an allocation was refused, which the arena
      * multiplier is there to make impossible. The step is marked, and the
      * sample it took stays. */
-    if (!mem_results.w3_count_expected[i])
+    if (!mem_results.w4_count_expected[i])
     {
-      mem_results.w3_status[i] = MEM_STATUS_SETUP_FAILED;
+      mem_results.w4_status[i] = MEM_STATUS_SETUP_FAILED;
       mem_results.failures |= MEM_FAILURE_ARENA_SIZE;
     }
 
@@ -495,7 +495,7 @@ static void mem_run_w3(void)
 
   for (uint32_t i = 0U; i < MEM_S_COUNT; i++)
   {
-    if (mem_results.w3_used_bytes[i] == 0U)
+    if (mem_results.w4_used_bytes[i] == 0U)
     {
       mem_results.capabilities &= ~(uint32_t) MEM_CAPABILITY_USED_BYTES;
     }
@@ -548,7 +548,7 @@ static bool mem_sweep_odd(BMTH_measurement_series_t *mseries)
  * that keeps it in size classes, or by address, does not. Either is a result,
  * and the harness does not need to know which kind it is driving.
  */
-static void mem_run_w4(void)
+static void mem_run_w5(void)
 {
   for (uint32_t s = MEM_S_MIN; s <= MEM_S_MAX; s++)
   {
@@ -561,7 +561,7 @@ static void mem_run_w4(void)
 
     if (!mem_clog(bytes))
     {
-      mem_results.w4_status[j] = MEM_STATUS_UNBOUNDED;
+      mem_results.w5_status[j] = MEM_STATUS_UNBOUNDED;
       mem_results.failures |= MEM_FAILURE_UNBOUNDED;
       mem_allocator_destroy_arena();
       mem_allocator_create_arena(bytes);
@@ -569,7 +569,7 @@ static void mem_run_w4(void)
       continue;
     }
 
-    mem_results.w4_allocations[j] = mem_held_count;
+    mem_results.w5_allocations[j] = mem_held_count;
 
     /* The span cross check, and the only place it can live. W3 fills through
      * the blind path, which keeps no pointers by design, so that the loop
@@ -617,14 +617,14 @@ static void mem_run_w4(void)
       }
     }
 
-    if (mem_sweep_odd(&mem_w4_free[j]))
+    if (mem_sweep_odd(&mem_w5_free[j]))
     {
-      mem_results.w4_holes[j]  = mem_w4_free[j].iteration_count;
-      mem_results.w4_status[j] = MEM_STATUS_OK;
+      mem_results.w5_holes[j]  = mem_w5_free[j].iteration_count;
+      mem_results.w5_status[j] = MEM_STATUS_OK;
     }
     else
     {
-      mem_results.w4_status[j] = MEM_STATUS_SETUP_FAILED;
+      mem_results.w5_status[j] = MEM_STATUS_SETUP_FAILED;
     }
 
     /* A fill short of N(s) met a refusal the arena multiplier is there to
@@ -632,7 +632,7 @@ static void mem_run_w4(void)
      * meant to run on. Marked, and the samples stay. */
     if (mem_held_count != (uint32_t) (MEM_ARENA_SIZE >> s))
     {
-      mem_results.w4_status[j] = MEM_STATUS_SETUP_FAILED;
+      mem_results.w5_status[j] = MEM_STATUS_SETUP_FAILED;
       mem_results.failures |= MEM_FAILURE_ARENA_SIZE;
     }
 
@@ -657,7 +657,7 @@ static void mem_run_w4(void)
  * the free list gets shorter as the sweep proceeds where in W4 it gets longer.
  * W5 minus W4 at the same index is what the two coalesce branches cost.
  */
-static void mem_run_w5(void)
+static void mem_run_w6(void)
 {
   for (uint32_t s = MEM_S_MIN; s <= MEM_S_MAX; s++)
   {
@@ -670,7 +670,7 @@ static void mem_run_w5(void)
 
     if (!mem_clog(bytes))
     {
-      mem_results.w5_status[j] = MEM_STATUS_UNBOUNDED;
+      mem_results.w6_status[j] = MEM_STATUS_UNBOUNDED;
       mem_results.failures |= MEM_FAILURE_UNBOUNDED;
       mem_allocator_destroy_arena();
       mem_allocator_create_arena(bytes);
@@ -678,7 +678,7 @@ static void mem_run_w5(void)
       continue;
     }
 
-    mem_results.w5_allocations[j] = mem_held_count;
+    mem_results.w6_allocations[j] = mem_held_count;
 
     /* Every even index, the last allocation included: it is the odd sweep
      * that excludes it, and leaving it allocated here would give the highest
@@ -689,21 +689,21 @@ static void mem_run_w5(void)
       mem_held[k] = NULL;
     }
 
-    if (mem_sweep_odd(&mem_w5_free[j]))
+    if (mem_sweep_odd(&mem_w6_free[j]))
     {
-      mem_results.w5_holes[j]  = mem_w5_free[j].iteration_count;
-      mem_results.w5_status[j] = MEM_STATUS_OK;
+      mem_results.w6_holes[j]  = mem_w6_free[j].iteration_count;
+      mem_results.w6_status[j] = MEM_STATUS_OK;
     }
     else
     {
-      mem_results.w5_status[j] = MEM_STATUS_SETUP_FAILED;
+      mem_results.w6_status[j] = MEM_STATUS_SETUP_FAILED;
     }
 
     /* As in W4: a fill short of N(s) is a refusal on an arena sized so that
      * none can happen. Marked, and the samples stay. */
-    if (mem_results.w5_allocations[j] != (uint32_t) (MEM_ARENA_SIZE >> s))
+    if (mem_results.w6_allocations[j] != (uint32_t) (MEM_ARENA_SIZE >> s))
     {
-      mem_results.w5_status[j] = MEM_STATUS_SETUP_FAILED;
+      mem_results.w6_status[j] = MEM_STATUS_SETUP_FAILED;
       mem_results.failures |= MEM_FAILURE_ARENA_SIZE;
     }
 
@@ -730,13 +730,13 @@ static void mem_run_w5(void)
  * fixed-size arena is not, and the number of pieces is MEM_ARENA_SIZE divided
  * by the granularity, so its cost halves at every step. The arena is the same
  * number of bytes at every step, so the granularity is the only thing this
- * axis carries. w6_native says whether
+ * axis carries. w8_native says whether
  * what was measured is the allocator laying out its own arena or the adapter
  * standing in for one.
  */
-static void mem_run_w6(void)
+static void mem_run_w8(void)
 {
-  mem_results.w6_native = mem_allocator_create_is_native();
+  mem_results.w8_native = mem_allocator_create_is_native();
 
   for (uint32_t g = MEM_S_MIN; g <= MEM_S_MAX; g++)
   {
@@ -749,13 +749,13 @@ static void mem_run_w6(void)
      * not accumulate them across the sweep. Untimed. */
     mem_allocator_destroy_arena();
 
-    MEM_MEASURE(&mem_w6_create[i], mem_allocator_create_arena(bytes));
+    MEM_MEASURE(&mem_w8_create[i], mem_allocator_create_arena(bytes));
 
     /* Outside the window: the creation is the measurement, and clogging the
      * store behind it is not part of it. */
     mem_allocator_trim_store();
 
-    mem_results.w6_status[i] = MEM_STATUS_OK;
+    mem_results.w8_status[i] = MEM_STATUS_OK;
   }
 
   mem_allocator_destroy_arena();
@@ -1013,19 +1013,19 @@ static void mem_mark_all(mem_status_t status)
   for (uint32_t i = 0U; i < MEM_S_COUNT; i++)
   {
     mem_results.w1_status[i] = status;
-    mem_results.w2_status[i] = status;
     mem_results.w3_status[i] = status;
+    mem_results.w4_status[i] = status;
   }
 
   for (uint32_t j = 0U; j < MEM_S_COUNT; j++)
   {
-    mem_results.w4_status[j] = status;
     mem_results.w5_status[j] = status;
+    mem_results.w6_status[j] = status;
   }
 
   for (uint32_t i = 0U; i < MEM_S_COUNT; i++)
   {
-    mem_results.w6_status[i] = status;
+    mem_results.w8_status[i] = status;
   }
 
   for (uint32_t r = 0U; r < (uint32_t) MEM_W7_RUN_COUNT; r++)
@@ -1038,8 +1038,8 @@ static void mem_mark_reclaim_dependent(mem_status_t status)
 {
   for (uint32_t j = 0U; j < MEM_S_COUNT; j++)
   {
-    mem_results.w4_status[j] = status;
     mem_results.w5_status[j] = status;
+    mem_results.w6_status[j] = status;
   }
 
   for (uint32_t r = 0U; r < (uint32_t) MEM_W7_RUN_COUNT; r++)
@@ -1081,9 +1081,9 @@ uint32_t mem_harness_run(void)
   }
 
   mem_run_w1();
-  mem_run_w2();
   mem_run_w3();
-  mem_run_w6();
+  mem_run_w4();
+  mem_run_w8();
 
   /*
    * The fail case for an allocator whose free gives nothing back. W4, W5 and
@@ -1094,8 +1094,8 @@ uint32_t mem_harness_run(void)
    */
   if (mem_has(MEM_CAPABILITY_RECLAIM))
   {
-    mem_run_w4();
     mem_run_w5();
+    mem_run_w6();
 
     for (uint32_t r = 0U; r < (uint32_t) MEM_W7_RUN_COUNT; r++)
     {
@@ -1128,23 +1128,23 @@ void mem_harness_init(void)
       &mem_w1_alloc[i], 0, NULL,
       BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
     BMTH_mseries_initialize(
-      &mem_w2_free[i], 0, NULL,
+      &mem_w3_free[i], 0, NULL,
       BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
     BMTH_mseries_initialize(
-      &mem_w3_fill[i], 0, NULL,
+      &mem_w4_alloc[i], 0, NULL,
       BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
     BMTH_mseries_initialize(
-      &mem_w6_create[i], 0, NULL,
+      &mem_w8_create[i], 0, NULL,
       BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
   }
 
   for (uint32_t j = 0U; j < MEM_S_COUNT; j++)
   {
     BMTH_mseries_initialize(
-      &mem_w4_free[j], MEM_HOLES_MAX, mem_w4_buffer[j],
+      &mem_w5_free[j], MEM_HOLES_MAX, mem_w4_buffer[j],
       BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
     BMTH_mseries_initialize(
-      &mem_w5_free[j], MEM_HOLES_MAX, mem_w5_buffer[j],
+      &mem_w6_free[j], MEM_HOLES_MAX, mem_w5_buffer[j],
       BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
   }
 
