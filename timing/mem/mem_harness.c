@@ -148,22 +148,20 @@ static bool mem_has(uint32_t capability)
 }
 
 /*
- * Allocates the usable memory budget and keeps every allocation by index.
- * Never inside a window.
+ * Clogs the arena: allocates until the allocator is full, keeping every
+ * allocation by index. Never inside a window.
  *
- * Stops at N(s) successful allocations, and does not call allocate again. A
- * NULL before that leaves mem_held_count
- * below N(s), which is what the caller checks; the return value stays what it
- * was, false only when the allocator handed out more than the array can hold.
+ * Stops when mem_allocator_alloc returns NULL, which is full; mem_held_count
+ * is then N(s), which is what the caller checks. Returns false only when the
+ * allocator hands out more than MEM_ALLOCATIONS_MAX, the array bound.
  */
 static bool mem_clog(size_t bytes)
 {
-  const uint32_t limit = (uint32_t) (MEM_REQUESTED_SPACE / bytes);
-  void          *allocation;
+  void *allocation;
 
   mem_held_count = 0U;
 
-  while (mem_held_count < limit)
+  while (true)
   {
     allocation = mem_allocator_alloc(bytes);
 
