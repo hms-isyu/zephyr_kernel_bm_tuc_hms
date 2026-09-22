@@ -40,8 +40,8 @@
  *   usable       MEM_REQUESTED_SPACE. The usable memory every step allocates,
  *   memory       the same number for every allocator and every step, so a
  *   budget       count of allocations means the same thing everywhere.
- *   headroom     MEM_ARENA_MULTIPLIER, the factor the arena is oversized by so
- *                that no step can exhaust it.
+ *   arena        MEM_ARENA_MULTIPLIER, the factor the arena is oversized by so
+ *   multiplier   that no step can exhaust it.
  *   arena        the storage the adapter declares, MEM_ARENA_SIZE. Created
  *                once per step, never sized per step, the same number of bytes
  *                for every allocator.
@@ -79,9 +79,10 @@
  * \brief Create the arena, cut at the given granularity.
  *
  * The arena is MEM_ARENA_SIZE every time, whatever the granularity: the
- * usable memory budget times the headroom, so the storage that goes in is the
- * same number of bytes at every step of the sweep and for every allocator, and
- * the bookkeeping comes out of the headroom rather than out of the budget.
+ * usable memory budget times the arena multiplier, so the storage that goes
+ * in is the same number of bytes at every step of the sweep and for every
+ * allocator, and the bookkeeping comes out of the bytes the arena
+ * multiplier adds, rather than out of the budget.
  * What the allocator reports it was given is the real arena, read back through
  * mem_allocator_arena_bytes(). Every allocation the harness holds is void
  * afterwards, and the arena that comes back holds nothing.

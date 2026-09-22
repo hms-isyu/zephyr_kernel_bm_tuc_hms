@@ -352,9 +352,9 @@ static void mem_probe_capabilities(void)
  * holding one free chunk and nothing else, which is the cheapest state there
  * is and therefore the floor the other allocation workloads are read against.
  *
- * Every step is run. On the headroom arena no step is expected to be refused:
- * one allocation of 2^MEM_S_MAX out of MEM_ARENA_SIZE leaves the headroom
- * untouched. A refusal here is therefore a fault of the harness setup, marked
+ * Every step is run. On the arena no step is expected to be refused: one
+ * allocation of 2^MEM_S_MAX out of MEM_ARENA_SIZE leaves the bytes the
+ * arena multiplier adds untouched. A refusal here is therefore a fault of the harness setup, marked
  * through MEM_FAILURE_ARENA_SIZE, and w1_served still says which steps it was.
  */
 static void mem_run_w1(void)
@@ -403,7 +403,7 @@ static void mem_run_w1(void)
  * both branches - at the same request size.
  *
  * A step whose setup allocation is refused has no free to measure. On the
- * headroom arena that cannot be a property of the allocator, so it is recorded
+ * arena that cannot be a property of the allocator, so it is recorded
  * as a failed setup and sets MEM_FAILURE_ARENA_SIZE rather than being skipped
  * silently.
  */
@@ -512,9 +512,9 @@ static void mem_run_w3(void)
       mem_results.failures |= MEM_FAILURE_UNBOUNDED;
     }
 
-    /* A count below N(s) means an allocation was refused, which the headroom
-     * is there to make impossible. The step is marked, and the sample it took
-     * stays. */
+    /* A count below N(s) means an allocation was refused, which the arena
+     * multiplier is there to make impossible. The step is marked, and the
+     * sample it took stays. */
     if (!mem_results.w3_count_expected[i])
     {
       mem_results.w3_status[i] = MEM_STATUS_SETUP_FAILED;
@@ -665,9 +665,9 @@ static void mem_run_w4(void)
       mem_results.w4_status[j] = MEM_STATUS_SETUP_FAILED;
     }
 
-    /* A fill short of N(s) met a refusal the headroom is there to make
-     * impossible, so the state the sweep ran on is not the state it was meant
-     * to run on. Marked, and the samples stay. */
+    /* A fill short of N(s) met a refusal the arena multiplier is there to
+     * make impossible, so the state the sweep ran on is not the state it was
+     * meant to run on. Marked, and the samples stay. */
     if (mem_held_count != (uint32_t) (MEM_ARENA_SIZE >> s))
     {
       mem_results.w4_status[j] = MEM_STATUS_SETUP_FAILED;

@@ -73,8 +73,8 @@
  * MEM_REQUESTED_SPACE is not the size of any array.
  *
  * MEM_ARENA_SIZE is the arena: the storage an adapter declares,
- * MEM_ARENA_MULTIPLIER times the requested space. The headroom this leaves
- * keeps the bookkeeping off the budget, so no step can exhaust the arena and
+ * MEM_ARENA_MULTIPLIER times the requested space. The bytes the arena
+ * multiplier adds keep the bookkeeping off the budget, so no step can exhaust the arena and
  * every step allocates its full N(s) = MEM_REQUESTED_SPACE / 2^s times. The
  * arena is created once per step and is never sized per step, so it is the
  * same number of bytes at every step and for every allocator.
@@ -104,8 +104,8 @@
 #define MEM_S_COUNT (MEM_S_MAX - MEM_S_MIN + 1U)
 #define MEM_REQUESTED_SPACE (1U << MEM_S_MAX)
 
-/* Overridable from the build, so a headroom question can be answered without
- * editing this header. */
+/* Overridable from the build, so an arena multiplier question can be
+ * answered without editing this header. */
 #ifndef MEM_ARENA_MULTIPLIER
 #define MEM_ARENA_MULTIPLIER (4U)
 #endif
