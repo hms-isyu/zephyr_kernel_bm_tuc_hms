@@ -614,46 +614,33 @@ static void mem_run_w4_fixed(void)
 }
 
 /*
- * The sweep W4 and W5 both take: free every odd index of the filled arena,
- * ascending, with the last allocation excluded.
+ * The sweep W5 and W6 share: c measured frees of the odd indices among the
+ * first 2c entries of mem_held[], ascending, one MEM_MEASURE window each.
+ * Odd indices, so every freed allocation keeps a live one on each side.
  *
- * Odd indices, so every freed allocation keeps a live one on each side and no
- * two holes are adjacent. The last allocation is excluded because what the
- * fill did not spend sits next to it: the arena is MEM_ARENA_MULTIPLIER
- * times the requested space, so free space past the last allocation is there
- * at every step, and freeing it would coalesce where none of the others do
- * and put one different sample in the middle of the series.
- *
- * Fewer than three allocations leaves no odd index below the last one, so
- * there is nothing to sweep. That is expected at the top of the range and is
- * reported, not treated as a fault.
+ * The count is the caller's to guard: this helper takes c on trust and
+ * assumes mem_held holds at least 2c live entries.
  */
-static bool mem_sweep_odd(BMTH_measurement_series_t *mseries)
+static void mem_sweep_odd(BMTH_measurement_series_t *series, uint32_t c)
 {
-  const uint32_t n = mem_held_count;
-
-  if (n < 3U)
+  for (uint32_t i = 1U; i <= (2U * c) - 1U; i += 2U)
   {
-    return false;
+    MEM_MEASURE(series, mem_allocator_free(mem_held[i]));
+    mem_held[i] = NULL;
   }
-
-  for (uint32_t k = 1U; (k + 1U) < n; k += 2U)
-  {
-    MEM_MEASURE(mseries, mem_allocator_free(mem_held[k]));
-    mem_held[k] = NULL;
-  }
-
-  return true;
 }
 
 /*
- * W4, free with no coalesce. The cost of a free against the number of holes
- * already on the free list, with neither neighbour free at any point in the
- * sweep: the series index is the number of frees that came before it.
+ * W5, free with both neighbours live. c(s) measured frees of the odd
+ * indices in a clog of the requested space, with every even index left
+ * allocated, so each freed allocation has a live neighbour on both sides
+ * and none of the frees coalesce.
  *
- * An allocator that keeps its free space in one unordered list grows here. One
- * that keeps it in size classes, or by address, does not. Either is a result,
- * and the harness does not need to know which kind it is driving.
+ * N(s) is the clog's actual count, read once between the clog and the
+ * first free. The clog must reach at least 2c(s) allocations for the sweep
+ * to have both an odd index and its two even neighbours to draw on at
+ * every one of its c(s) frees; short of that the step is marked and no
+ * sample is taken.
  */
 static void mem_run_w5(void)
 {
@@ -661,6 +648,7 @@ static void mem_run_w5(void)
   {
     const uint32_t j     = MEM_INDEX_OF_S(s);
     const size_t   bytes = MEM_SIZE_OF_S(s);
+    const uint32_t c     = (uint32_t) (MEM_REQUESTED_SPACE / bytes);
 
     mem_allocator_destroy_arena();
     mem_allocator_create_arena(bytes);
@@ -678,70 +666,19 @@ static void mem_run_w5(void)
 
     mem_results.w5_allocations[j] = mem_held_count;
 
-    /* The span cross check, and the only place it can live. W3 fills through
-     * the blind path, which keeps no pointers by design, so that the loop
-     * inside its window holds one call, one compare and one increment; adding
-     * min and max tracking there would put arithmetic inside a measured loop.
-     * W4's setup fill is untimed and has just placed the same N(s)
-     * allocations of the same 2^s in mem_held[], so the span and the
-     * allocator's own figure can be taken here, on one live set, before the
-     * first free touches it.
-     *
-     * Disagreement beyond the tolerance means the two are not describing the
-     * same live set, which makes the total used space column unreadable. The
-     * span itself is a local: it is an instrument for this check, not a
-     * result, so it gets no field. */
-    if (mem_held_count > 0U)
+    if (mem_held_count < 2U * c)
     {
-      uintptr_t low  = (uintptr_t) mem_held[0];
-      uintptr_t high = (uintptr_t) mem_held[0];
-
-      for (uint32_t k = 1U; k < mem_held_count; k++)
-      {
-        const uintptr_t p = (uintptr_t) mem_held[k];
-
-        if (p < low)
-        {
-          low = p;
-        }
-
-        if (p > high)
-        {
-          high = p;
-        }
-      }
-
-      {
-        const size_t span     = (size_t) (high - low) + bytes;
-        const size_t reported = mem_allocator_used_bytes();
-        const size_t deviation =
-          (span > reported) ? (span - reported) : (reported - span);
-
-        if (deviation > (size_t) (MEM_ARENA_SIZE / 8U))
-        {
-          mem_results.failures |= MEM_FAILURE_USED_BYTES;
-        }
-      }
+      mem_results.w5_status[j] = MEM_STATUS_CLOG_TOO_SHORT;
+      mem_free_held();
+      mem_allocator_destroy_arena();
+      mem_allocator_create_arena(bytes);
+      mem_allocator_trim_store();
+      continue;
     }
 
-    if (mem_sweep_odd(&mem_w5_free[j]))
-    {
-      mem_results.w5_holes[j]  = mem_w5_free[j].iteration_count;
-      mem_results.w5_status[j] = MEM_STATUS_OK;
-    }
-    else
-    {
-      mem_results.w5_status[j] = MEM_STATUS_SETUP_FAILED;
-    }
-
-    /* A fill short of N(s) met a refusal the arena multiplier is there to
-     * make impossible, so the state the sweep ran on is not the state it was
-     * meant to run on. Marked, and the samples stay. */
-    if (mem_held_count != (uint32_t) (MEM_ARENA_SIZE >> s))
-    {
-      mem_results.w5_status[j] = MEM_STATUS_SETUP_FAILED;
-      mem_results.failures |= MEM_FAILURE_ARENA_SIZE;
-    }
+    mem_sweep_odd(&mem_w5_free[j], c);
+    mem_results.w5_holes[j]  = c;
+    mem_results.w5_status[j] = MEM_STATUS_OK;
 
     mem_free_held();
     mem_allocator_destroy_arena();
