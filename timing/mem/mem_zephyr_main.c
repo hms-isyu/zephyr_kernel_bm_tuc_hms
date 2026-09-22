@@ -8,17 +8,11 @@
 /******************************************************************************/
 
 /*
- * The Zephyr side of the allocation tests, and the only Zephyr-aware file they
- * share. It brings the part up, hands the CPU to the harness and reports the
- * result. The workload itself is in mem_harness.c, which includes no RTOS
- * header; porting the tests to another RTOS means writing this file again, and
- * one adapter per allocator, and nothing else.
+ * The Zephyr side of the allocation tests.
  */
 
 #include <zephyr/kernel.h>
-
 #include "benchmark_tools_hms.h"
-
 #include "mem_harness.h"
 
 /*******************************************************************************
@@ -32,9 +26,7 @@
 
 /*
  * How many read pairs BMTH_check_read_validity() takes before the run to
- * establish that the counter and the read window are stable. It is not the
- * number of samples the workload takes - every workload here takes one sample
- * per run - so it is a number of its own.
+ * establish that the counter and the read window are stable.
  */
 #define MEM_READ_VALIDITY_ITERATIONS (10000U)
 
@@ -64,14 +56,6 @@ static void I_Task(void *p1, void *p2, void *p3)
 
   failures = mem_harness_run();
 
-  /*
-   * Not an outlier count. Every sample here is a single measured operation and
-   * there is nothing for BMTH's running-average comparison to detect, so the
-   * pass signal is whether the allocator could be driven at all: an arena
-   * creation that does not empty the arena, a free that gives nothing back, an
-   * allocator that serves nothing, or one that never returns NULL.
-   * mem_results carries which of them it was.
-   */
   while (1)
   {
     if (failures != 0U)
@@ -104,8 +88,7 @@ int main(void)
     BMTH_signalize_jitter_detected();
   }
 
-  /* The harness runs in one thread that nothing preempts: it is the only
-   * thread this test creates, and no workload blocks. */
+  /* The harness runs in one thread that nothing preempts */
   k_thread_create(&idle_thread, idle_stack, THREAD_STACK_SIZE, I_Task, NULL,
                   NULL, NULL, IDLE_THREAD_PRIORITY, 0, K_NO_WAIT);
 

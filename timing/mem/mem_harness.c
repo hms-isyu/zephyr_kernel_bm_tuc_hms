@@ -7,12 +7,6 @@
  */
 /******************************************************************************/
 
-/*
- * Portable C. No RTOS header is included here, and none may be added: the
- * whole point of the file is that the identical workload runs against every
- * allocator on every target that has a port of the benchmark package.
- */
-
 #include <string.h>
 
 #include "benchmark_tools_hms.h"
@@ -26,19 +20,6 @@
 
 #define MEM_COUNT_OF(array_) (sizeof(array_) / sizeof((array_)[0]))
 
-/*
- * The one window. Every timed run of every workload against every allocator
- * goes through it, so the static read-pair overhead is the same everywhere and
- * the rows subtract.
- *
- * No jitter branch, unlike the rest of the suite. BMTH counts an outlier by
- * comparing a sample against the running average of the samples before it,
- * which says something when fifty thousand repetitions of one operation are
- * being taken and nothing at all here: every sample in this directory is a
- * different operation, at a different request size or a different sweep index,
- * so the samples are expected to differ and the count would be noise. The pass
- * signal is the failure mask instead.
- */
 #define MEM_MEASURE(mseries_, operation_)                                      \
   do                                                                           \
   {                                                                            \
@@ -51,7 +32,6 @@
     BMTH_mwindow_close(mseries_);                                              \
   } while (0)
 
-/* One step of layout L. */
 typedef struct mem_w7_step_t
 {
   size_t  bytes;
@@ -163,25 +143,6 @@ static bool mem_has(uint32_t capability)
   return (mem_results.capabilities & capability) != 0U;
 }
 
-/*
- * Allocates the usable memory budget and keeps nothing but the count, so that
- * the loop inside W3's window is one call, one compare and one increment per
- * allocation and no bookkeeping store. The only way back from here is creating
- * the arena again, which is why every caller is gated on
- * MEM_CAPABILITY_CREATE.
- *
- * The loop stops on its count, at N(s) = MEM_REQUESTED_SPACE / bytes
- * successful allocations, and does not call allocate again: the arena is
- * oversized by MEM_ARENA_MULTIPLIER, so what ends a fill is the usable memory
- * budget being spent and not the allocator refusing. One division per fill,
- * before the loop, the same fixed cost at every step and for every allocator.
- *
- * The NULL compare is the fail case: a step that stops short of N(s) met a
- * refusal it was not supposed to meet, and the caller reads that off the
- * count. MEM_ALLOCATIONS_MAX is the arena's count at the smallest request,
- * above N(MEM_S_MIN), so the count can never reach it from above and
- * mem_fill_bounded stays the guard on the array bound.
- */
 static void mem_fill_blind(size_t bytes)
 {
   const uint32_t limit = (uint32_t) (MEM_REQUESTED_SPACE / bytes);
@@ -354,8 +315,9 @@ static void mem_probe_capabilities(void)
  *
  * Every step is run. On the arena no step is expected to be refused: one
  * allocation of 2^MEM_S_MAX out of MEM_ARENA_SIZE leaves the bytes the
- * arena multiplier adds untouched. A refusal here is therefore a fault of the harness setup, marked
- * through MEM_FAILURE_ARENA_SIZE, and w1_served still says which steps it was.
+ * arena multiplier adds untouched. A refusal here is therefore a fault of the
+ * harness setup, marked through MEM_FAILURE_ARENA_SIZE, and w1_served still
+ * says which steps it was.
  */
 static void mem_run_w1(void)
 {
