@@ -197,6 +197,8 @@ typedef struct mem_results_t
 
   uint32_t real_arena[MEM_S_COUNT]; /**< @brief Reported arena size per step. */
   uint32_t w4_used_bytes[MEM_S_COUNT]; /**< @brief Total space used, T(s). */
+  uint32_t w4_fixed_used_bytes
+    [MEM_S_COUNT]; /**< @brief Total space used, T(s), for W4_FIXED_SIZE. */
   uint32_t
     fixed_bytes[MEM_S_COUNT]; /**< @brief Fixed arena overhead per step. */
 

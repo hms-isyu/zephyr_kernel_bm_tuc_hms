@@ -483,6 +483,7 @@ static void mem_run_w4_fixed(void)
     const uint32_t i     = MEM_INDEX_OF_S(s);
     const size_t   bytes = MEM_SIZE_OF_S(s);
     const uint32_t count = (uint32_t) (MEM_REQUESTED_SPACE / bytes);
+    uint32_t       used;
 
     if (!mem_allocator_supports_alloc_n())
     {
@@ -499,6 +500,18 @@ static void mem_run_w4_fixed(void)
                 = mem_allocator_alloc_n(count, mem_alloc_n_buffer));
 
     mem_results.w4_fixed_status[i] = MEM_STATUS_OK;
+
+    /* The window is closed and the count allocations are still live, the one
+     * moment the total used space can be read. */
+    used                                = (uint32_t) mem_allocator_used_bytes();
+    mem_results.w4_fixed_used_bytes[i]  = used;
+
+    /* used must fall within [requested space, arena size]. */
+    if ((used < (uint32_t) MEM_REQUESTED_SPACE)
+        || (used > (uint32_t) MEM_ARENA_SIZE))
+    {
+      mem_results.failures |= MEM_FAILURE_SPACE_INVARIANT;
+    }
 
     mem_allocator_destroy_arena();
     mem_allocator_create_arena(bytes);
