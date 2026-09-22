@@ -357,6 +357,7 @@ config BENCHMARK_TEST_MEM_SLAB
 
 config BENCHMARK_TEST_MEM_BLOCKS
     bool "Allocation via sys_mem_blocks"
+    select SYS_MEM_BLOCKS
     help
       timing/mem/mem_blocks/mem_blocks.c
 
