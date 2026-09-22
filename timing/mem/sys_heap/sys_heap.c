@@ -166,6 +166,9 @@ bool mem_allocator_supports_alloc_n(void)
  */
 bool mem_allocator_alloc_n(size_t count, void **allocations)
 {
+  (void) count;
+  (void) allocations;
+
   return false;
 }
 
