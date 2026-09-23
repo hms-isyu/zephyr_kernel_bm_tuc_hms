@@ -44,28 +44,28 @@ target_sources_ifdef(CONFIG_BENCHMARK_TEST_INTERRUPT_RESPONSE_TIME app PRIVATE
                      timing/interrupt_latency/time_interrupt_response.c)
 
 target_sources_ifdef(CONFIG_BENCHMARK_TEST_IPC_MAILBOX_ASYNC app PRIVATE
-                     timing/ipc/mailbox/mailbox_async.c)
+                     timing/itc/mailbox/mailbox_async.c)
 
 target_sources_ifdef(CONFIG_BENCHMARK_TEST_IPC_FIFO app PRIVATE
-                     timing/ipc/fifo/fifo.c)
+                     timing/itc/fifo/fifo.c)
 
 target_sources_ifdef(CONFIG_BENCHMARK_TEST_IPC_LIFO app PRIVATE
-                     timing/ipc/lifo/lifo.c)
+                     timing/itc/lifo/lifo.c)
 
 target_sources_ifdef(CONFIG_BENCHMARK_TEST_IPC_STACK app PRIVATE
-                     timing/ipc/stack/stack.c)
+                     timing/itc/stack/stack.c)
 
 target_sources_ifdef(CONFIG_BENCHMARK_TEST_IPC_MSGQ app PRIVATE
-                     timing/ipc/msgq/msgq.c)
+                     timing/itc/msgq/msgq.c)
 
 target_sources_ifdef(CONFIG_BENCHMARK_TEST_IPC_PIPE_ASYNC app PRIVATE
-                     timing/ipc/pipe/pipe_async.c)
+                     timing/itc/pipe/pipe_async.c)
 
 target_sources_ifdef(CONFIG_BENCHMARK_TEST_IPC_MAILBOX_SYNC app PRIVATE
-                     timing/ipc/mailbox/mailbox_sync.c)
+                     timing/itc/mailbox/mailbox_sync.c)
 
 target_sources_ifdef(CONFIG_BENCHMARK_TEST_IPC_PIPE_SYNC app PRIVATE
-                     timing/ipc/pipe/pipe_sync.c)
+                     timing/itc/pipe/pipe_sync.c)
 
 target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_TASK_SWITCH_PREEMPT app PRIVATE
                                 timing/task_switch/task_preempt)
@@ -80,21 +80,21 @@ target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_SEM_TASK_SWITCH_PREEMPT a
 target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_INTERRUPT_RESPONSE_TIME app PRIVATE
                            timing/interrupt_latency)
 target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_IPC_MAILBOX_ASYNC app PRIVATE
-                           timing/ipc/mailbox)
+                           timing/itc/mailbox)
 target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_IPC_FIFO app PRIVATE
-                           timing/ipc/fifo)
+                           timing/itc/fifo)
 target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_IPC_LIFO app PRIVATE
-                           timing/ipc/lifo)
+                           timing/itc/lifo)
 target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_IPC_STACK app PRIVATE
-                           timing/ipc/stack)
+                           timing/itc/stack)
 target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_IPC_MSGQ app PRIVATE
-                           timing/ipc/msgq)
+                           timing/itc/msgq)
 target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_IPC_PIPE_ASYNC app PRIVATE
-                           timing/ipc/pipe)
+                           timing/itc/pipe)
 target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_IPC_MAILBOX_SYNC app PRIVATE
-                           timing/ipc/mailbox)
+                           timing/itc/mailbox)
 target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_IPC_PIPE_SYNC app PRIVATE
-                           timing/ipc/pipe)
+                           timing/itc/pipe)
 
 # The allocation tests. One adapter per allocator, plus the portable workload
 # in mem_harness.c and the one Zephyr-aware file they share. The adapter is the
