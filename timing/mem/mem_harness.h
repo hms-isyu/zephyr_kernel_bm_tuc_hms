@@ -44,7 +44,7 @@
 
 #ifndef MEM_ARENA_MULTIPLIER
 /** @brief Factor to calculate total arena size, ensuring bookkeeping fits. */
-#define MEM_ARENA_MULTIPLIER (5U)
+#define MEM_ARENA_MULTIPLIER (8U)
 #endif
 
 /** @brief Total size of the declared arena in bytes. */
@@ -197,8 +197,8 @@ typedef struct mem_results_t
 
   uint32_t real_arena[MEM_S_COUNT]; /**< @brief Reported arena size per step. */
   uint32_t w4_used_bytes[MEM_S_COUNT]; /**< @brief Total space used, T(s). */
-  uint32_t w4_fixed_used_bytes
-    [MEM_S_COUNT]; /**< @brief Total space used, T(s), for W4_FIXED_SIZE. */
+  uint32_t w4_fixed_used_bytes[MEM_S_COUNT]; /**< @brief Total space used, T(s),
+                                                for W4_FIXED_SIZE. */
   uint32_t
     fixed_bytes[MEM_S_COUNT]; /**< @brief Fixed arena overhead per step. */
 
@@ -210,13 +210,12 @@ typedef struct mem_results_t
 
   mem_status_t w3_status[MEM_S_COUNT]; /**< @brief Status of W3 free. */
 
-  mem_status_t w4_status[MEM_S_COUNT]; /**< @brief Status of W4 fill. */
-  uint32_t
-    w4_allocations[MEM_S_COUNT]; /**< @brief Allocation count reached. */
+  mem_status_t w4_status[MEM_S_COUNT];  /**< @brief Status of W4 fill. */
+  uint32_t w4_allocations[MEM_S_COUNT]; /**< @brief Allocation count reached. */
   bool w4_count_expected[MEM_S_COUNT]; /**< @brief True if count reached c(s). */
 
-  mem_status_t w4_fixed_status
-    [MEM_S_COUNT]; /**< @brief Status of W4_FIXED_SIZE alloc_n. */
+  mem_status_t w4_fixed_status[MEM_S_COUNT]; /**< @brief Status of W4_FIXED_SIZE
+                                                alloc_n. */
 
   mem_status_t w5_status[MEM_S_COUNT];  /**< @brief Status of W5 free. */
   uint32_t w5_allocations[MEM_S_COUNT]; /**< @brief N(s) allocations held. */

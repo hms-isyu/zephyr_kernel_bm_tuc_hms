@@ -44,7 +44,8 @@ void mem_allocator_create_arena(size_t granularity)
   k_heap_init(&test_heap, arena, sizeof(arena));
 }
 
-/*! \brief No-op: the arena is a plain array, overwritten in place on the next create. */
+/*! \brief No-op: the arena is a plain array, overwritten in place on the next
+ * create. */
 void mem_allocator_destroy_arena(void)
 {
   return;
@@ -55,7 +56,6 @@ void mem_allocator_trim_store(void)
 {
   return;
 }
-
 
 void *mem_allocator_alloc(size_t bytes)
 {
@@ -128,4 +128,3 @@ bool mem_allocator_alloc_n(size_t count, void **allocations)
 
   return false;
 }
-

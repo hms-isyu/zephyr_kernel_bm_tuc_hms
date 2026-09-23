@@ -35,7 +35,8 @@ BUILD_ASSERT((MEM_ARENA_SIZE & (MEM_ARENA_SIZE - 1U)) == 0U,
 
 /* Pool index for a granularity, via count-trailing-zeros for constant
  * time. */
-#define MB_STEP_OF(granularity_)                                                 ((uint32_t) __builtin_ctz((uint32_t) (granularity_)) - MEM_S_MIN)
+#define MB_STEP_OF(granularity_)                                               \
+  ((uint32_t) __builtin_ctz((uint32_t) (granularity_)) - MEM_S_MIN)
 
 /*******************************************************************************
  * Variables
@@ -101,7 +102,6 @@ void mem_allocator_trim_store(void)
   return;
 }
 
-
 /**
  * @brief Allocates one piece from the live pool.
  *
@@ -145,8 +145,7 @@ bool mem_allocator_create_is_native(void)
  */
 size_t mem_allocator_arena_bytes(void)
 {
-  return (size_t) test_live->info.num_blocks
-         << test_live->info.blk_sz_shift;
+  return (size_t) test_live->info.num_blocks << test_live->info.blk_sz_shift;
 }
 
 /**
@@ -161,9 +160,9 @@ size_t mem_allocator_used_bytes(void)
 {
   size_t count = 0U;
 
-  if (sys_bitarray_popcount_region(test_live->bitmap,
-                                   (size_t) test_live->info.num_blocks, 0U,
-                                   &count) != 0)
+  if (sys_bitarray_popcount_region(
+        test_live->bitmap, (size_t) test_live->info.num_blocks, 0U, &count)
+      != 0)
   {
     return 0U;
   }

@@ -32,7 +32,8 @@ BUILD_ASSERT((MEM_SIZE_OF_S(MEM_S_MIN) % sizeof(void *)) == 0U,
 
 /* Number of pieces the arena holds at a granularity, as a shift instead of
  * a division. */
-#define MS_PIECES(granularity_)                                                  ((uint32_t) (MEM_ARENA_SIZE >> __builtin_ctz((uint32_t) (granularity_))))
+#define MS_PIECES(granularity_)                                                \
+  ((uint32_t) (MEM_ARENA_SIZE >> __builtin_ctz((uint32_t) (granularity_))))
 
 /*******************************************************************************
  * Variables
@@ -77,7 +78,6 @@ void mem_allocator_trim_store(void)
 {
   return;
 }
-
 
 /**
  * @brief Allocates one piece from the slab.

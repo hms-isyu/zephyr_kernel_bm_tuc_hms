@@ -30,7 +30,7 @@
  */
 BUILD_ASSERT(CONFIG_HEAP_MEM_POOL_SIZE >= MEM_ARENA_SIZE,
              "set CONFIG_HEAP_MEM_POOL_SIZE in prj.conf to at least "
-             "MEM_ARENA_SIZE, which is 4096 at a multiplier of 4");
+             "MEM_ARENA_SIZE");
 
 /*******************************************************************************
  * Variables
@@ -56,7 +56,8 @@ void mem_allocator_create_arena(size_t granularity)
               _system_heap.heap.init_bytes);
 }
 
-/*! \brief No-op: the system heap's array is the kernel's, overwritten in place on the next create. */
+/*! \brief No-op: the system heap's array is the kernel's, overwritten in place
+ * on the next create. */
 void mem_allocator_destroy_arena(void)
 {
   return;
@@ -67,7 +68,6 @@ void mem_allocator_trim_store(void)
 {
   return;
 }
-
 
 void *mem_allocator_alloc(size_t bytes)
 {
@@ -140,4 +140,3 @@ bool mem_allocator_alloc_n(size_t count, void **allocations)
 
   return false;
 }
-

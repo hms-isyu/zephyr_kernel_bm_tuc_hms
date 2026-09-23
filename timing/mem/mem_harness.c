@@ -412,19 +412,18 @@ static void mem_run_w4(void)
      * target. */
     mem_results.real_arena[i] = (uint32_t) mem_allocator_arena_bytes();
 
-    MEM_MEASURE(&mem_w4_alloc[i],
-                while (count < target)
-                {
-                  scratch = mem_allocator_alloc(bytes);
+    MEM_MEASURE(
+      &mem_w4_alloc[i], while (count < target) {
+        scratch = mem_allocator_alloc(bytes);
 
-                  if (scratch == NULL)
-                  {
-                    full = true;
-                    break;
-                  }
+        if (scratch == NULL)
+        {
+          full = true;
+          break;
+        }
 
-                  count++;
-                });
+        count++;
+      });
 
     /* The window is closed and the step's allocations are still live, which is
      * the one moment the total used space can be read. The fixed arena cost
@@ -495,16 +494,15 @@ static void mem_run_w4_fixed(void)
     mem_allocator_create_arena(bytes);
     mem_allocator_trim_store();
 
-    MEM_MEASURE(&mem_w4_fixed_alloc[i],
-                mem_alloc_n_ok
-                = mem_allocator_alloc_n(count, mem_alloc_n_buffer));
+    MEM_MEASURE(&mem_w4_fixed_alloc[i], mem_alloc_n_ok = mem_allocator_alloc_n(
+                                          count, mem_alloc_n_buffer));
 
     mem_results.w4_fixed_status[i] = MEM_STATUS_OK;
 
     /* The window is closed and the count allocations are still live, the one
      * moment the total used space can be read. */
-    used                                = (uint32_t) mem_allocator_used_bytes();
-    mem_results.w4_fixed_used_bytes[i]  = used;
+    used                               = (uint32_t) mem_allocator_used_bytes();
+    mem_results.w4_fixed_used_bytes[i] = used;
 
     /* used must fall within [requested space, arena size]. */
     if ((used < (uint32_t) MEM_REQUESTED_SPACE)
