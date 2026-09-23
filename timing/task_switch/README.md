@@ -13,7 +13,6 @@ sub-directory of this family.
 | Workload | - | The work that is done inside the measurement. |
 | Measurement window | - | The relevant code path that is measured, the measurement path. |
 | Start/Stop markers | - | The start or stop of the time measurement. |
-| Priority comparison | `>`, `<`, `==` | `X > Y` means `X` has the higher scheduling priority, so `X` preempts `Y`. Written on priority, not on the priority number: `X > Y` holds when the number of `X` is the lower one. |
 
 ## Scenarios
 
