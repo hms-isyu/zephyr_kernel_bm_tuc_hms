@@ -5,3 +5,4 @@ packages/
 mcux_include.json
 .claude/
 CLAUDE*
+CMakeLocalPresets.json

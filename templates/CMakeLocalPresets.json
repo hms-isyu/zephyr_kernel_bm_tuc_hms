@@ -1,0 +1,23 @@
+{
+  "version": 7,
+  "configurePresets": [
+    {
+      "name": "build-local",
+      "displayName": "build-local",
+      "description": "Machine-specific paths. Replace every example path with the location on your machine.",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "GNUARMEMB_TOOLCHAIN_PATH": {
+          "value": "C:/tools/arm-gnu-toolchain-14.2.rel1-mingw-w64-x86_64-arm-none-eabi",
+          "type": "PATH"
+        }
+      },
+      "environment": {
+        "ZEPHYR_SDK_INSTALL_DIR": "C:/Users/jdoe/.mcuxpressotools",
+        "ZEPHYR_BASE": "C:/Users/jdoe/zephyr-ws/zephyr",
+        "MCUX_VENV_PATH": "C:/Users/jdoe/zephyr-ws/.venv/Scripts"
+      }
+    }
+  ]
+}

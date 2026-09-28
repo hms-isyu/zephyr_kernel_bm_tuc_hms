@@ -1,0 +1,22 @@
+{
+  "version": 7,
+  "cmakeMinimumRequired": {
+    "major": 3
+  },
+  "configurePresets": [
+    {
+      "name": "build-env",
+      "displayName": "build-env",
+      "hidden": true,
+      "environment": {
+        "ZEPHYR_BASE": "C:/Users/jdoe/zephyr-ws/zephyr",
+        "ZEPHYR_SDK_INSTALL_DIR": "C:/Users/jdoe/.mcuxpressotools",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "MCUX_VENV_PATH": "C:/Users/jdoe/zephyr-ws/.venv/Scripts",
+        "PATH": "$env{MCUX_VENV_PATH}${pathListSep}$penv{PATH}"
+      },
+      "cacheVariables": {}
+    }
+  ],
+  "buildPresets": []
+}
