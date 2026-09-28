@@ -1,17 +1,11 @@
 # sys_heap, allocation via sys_heap
 
-Set CONFIG_BENCHMARK_TEST_MEM_SYS_HEAP=y in prj.conf and rebuild, one test case per build.
-Terminology: [../README.md](../README.md).
+Set CONFIG_BENCHMARK_TEST_MEM_SYS_HEAP=y in prj.conf and rebuild.
+General readme: [../README.md](../README.md).
 
-sys_heap divides the arena into chunks, runs of CHUNK_UNIT = 8 byte units (lib/heap/heap.h:65).
-An allocation takes a free chunk from the bucket its size maps to (bucket_idx(),
-lib/heap/heap.h:303) and splits off what the request does not need (alloc_chunk(),
-lib/heap/heap.c:358). A free merges the freed chunk with each free neighbour (free_chunk(),
-lib/heap/heap.c:233). This test case times that path with no call
-around it. [../k_heap](../k_heap) runs the same sys_heap functions over an arena declared by
-the same statement, `static uint8_t arena[MEM_ARENA_SIZE] __noinit __aligned(8);`
-(sys_heap.c:30, k_heap.c:30), so k_heap - sys_heap at one workload and one step is what the
-k_heap calls add around them.
+sys_heap allocates memory of the requested size from an arena it manages as a heap, and frees
+it back to the arena. This test case times sys_heap_alloc(), sys_heap_free() and
+sys_heap_init().
 
 ## Participants
 
@@ -21,31 +15,41 @@ k_heap calls add around them.
 | sys_heap_free(&test_heap, allocation) | the measured operation behind mem_allocator_free() | W3, W5, W6 |
 | sys_heap_init(&test_heap, arena, sizeof(arena)) | the measured operation behind mem_allocator_create_arena(), the granularity unused | W8 |
 | test_heap | struct sys_heap | all |
-| arena | uint8_t[MEM_ARENA_SIZE]. sys_heap_init() places struct z_heap in chunk 0 at its start, marked used (heap.c:750-779). | all |
+| arena | uint8_t[MEM_ARENA_SIZE] | all |
 
 ## Measurement
 
-The branch sys_heap takes in each workload, from lib/heap/heap.c. These are the paths the
-family differences contrast here.
+Each workload the general readme defines triggers one call of sys_heap_alloc(),
+sys_heap_free() or sys_heap_init(), or one loop of sys_heap_alloc() for W4.
 
-| Workload | Path |
-| --- | --- |
-| W1 | No free chunk is listed in the size class of the request. alloc_chunk() takes the free remainder from a larger size class and sys_heap_alloc() splits it (heap.c:398-411, 433-437). |
-| W2 | The hole is the first entry in the size class of the request and has exactly its size. alloc_chunk() takes it and sys_heap_alloc() splits nothing (heap.c:384-393). |
-| W4 | Each of the c(s) allocations takes the W1 path. |
-| W3 | Free space lies to the right of the freed allocation, chunk 0 to its left. free_chunk() merges on the right only (heap.c:238-251). |
-| W5 | Live allocations on both sides. free_chunk() merges nothing. |
-| W6 | Free space on both sides. free_chunk() merges on both sides. |
-| W8 | sys_heap_init() lays out the whole arena whatever the granularity. |
+| Workload | Window | Holds |
+| --- | --- | --- |
+| W1, W2, W7_A | around one mem_allocator_alloc() | one sys_heap_alloc() |
+| W4 | around the allocation loop | up to c(s) sys_heap_alloc() |
+| W4_FIXED_SIZE | none, not applicable | nothing |
+| W3, W5, W6 | around one mem_allocator_free() | one sys_heap_free() |
+| W7_B, W7_C | none | one sys_heap_alloc(), not timed |
+| W8 | around mem_allocator_create_arena() | one sys_heap_init() |
 
-So W2 - W1 contrasts a take from the size class of the request without a split with a take
-from a larger size class and a split, and W6 - W5 contrasts two merges with none.
+W2 - W1 isolates an allocation into a hole of exactly the request against one into an arena with
+nothing live. W6 - W5 isolates a free with both neighbours already freed against one with both
+neighbours live; W3 is a free with free space on one side only.
 
-## Analysis
+| Test case | Defining parameters | Measurement |
+| --- | --- | --- |
+| sys_heap | test_heap over arena, no call around the measured operations | not a loaded variant |
 
-Expected: W8 is O(1) in s, since sys_heap_init() receives the same arena at every step. W4 is
-expected O(c(s)), since each of its c(s) allocations takes the same path.
+The sweep is the one the general readme gives. The workloads run in the order the general
+readme gives.
+
+## Compensation
+
+None: nothing is subtracted from a recorded value.
 
 ## Configuration
 
-Shared configuration: [../README.md](../README.md). Nothing is special to this test case.
+Shared configuration: [../README.md](../README.md).
+
+| Option | Value | Meaning |
+| --- | --- | --- |
+| CONFIG_SYS_HEAP_RUNTIME_STATS | not set | sys_heap_alloc() and sys_heap_free() maintain no counter bookkeeping on the measured path |

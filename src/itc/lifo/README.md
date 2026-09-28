@@ -1,23 +1,26 @@
 # lifo, one transaction through `k_lifo`
 
-Set `CONFIG_BENCHMARK_TEST_ITC_LIFO=y` in `prj.conf` and rebuild. The symbol builds
-[lifo.c](lifo.c). Family, terms and shared configuration: [../README.md](../README.md).
+Set `CONFIG_BENCHMARK_TEST_ITC_LIFO=y` and rebuild.
+Family and terms: [../README.md](../README.md).
 
-This test case times one transaction through `k_lifo`. Its source is that of
-[`../fifo`](../fifo) (`CONFIG_BENCHMARK_TEST_ITC_FIFO`) with `k_lifo` in place of `k_fifo`. The
-two differ in the insert position.
+`k_lifo` hands out the most recently inserted item first. This test case times one transaction
+through it.
 
 ## Participants
 
 | Name | What it is | Scenario |
 | --- | --- | --- |
 | `k_lifo_put()`, `k_lifo_get()` | send operation, receive operation | all |
-| `test_lifo_self`, `test_lifo_high`, `test_lifo_low` | `struct k_lifo`: `test_lifo_self` in `self`, `test_lifo_high` in `up`, `test_lifo_low` in `down`. All three initialised by `I_Task` before the first scenario. | `self`, `up`, `down` |
-| `test_item` | `test_item_t`: the pointer `reserved`, then `payload[MESSAGE_SIZE_MAX]` | all |
+| `T_Self` | sender and receiver | `self` |
+| `T_SendUp`, `T_RecvUp` | sender, receiver; `receiver > sender` | `up` |
+| `T_SendDown`, `T_RecvDown` | sender, receiver; `sender > receiver` | `down` |
+| `T_ArmUp` | control task; `sender > control task`, `receiver > control task` | `up` |
+| `T_ArmDown` | control task; `sender > control task`, `receiver > control task` | `down` |
+| `test_lifo_self` | `struct k_lifo` | `self` |
+| `test_lifo_high` | `struct k_lifo` | `up` |
+| `test_lifo_low` | `struct k_lifo` | `down` |
+| `test_item` | `test_item_t` | all |
 | `rx_item` | `test_item_t *`, the return value of `k_lifo_get()` | all |
-
-No measured operation reads `payload`. `queue_insert()` writes `reserved` as the list node
-(`sys_sfnode_init()`) only on its storage path, which only `self` takes.
 
 ## Measurement
 
@@ -25,24 +28,28 @@ Triggers and marker placement are those of the family scenarios.
 
 | Scenario | What the window holds |
 | --- | --- |
-| `self` | `k_lifo_put()` into the list, `k_lifo_get()` out of it |
+| `self` | `k_lifo_put()` into storage, `k_lifo_get()` out of it |
 | `up` | `k_lifo_put()` to the waiting receiver, one switch, `k_lifo_get()` |
-| `down` | `k_lifo_put()` to the waiting receiver, `k_sem_take()` of `T_SendDown` up to its pend, one switch, `k_lifo_get()` |
+| `down` | `k_lifo_put()` to the waiting receiver, the sender's wait for its next start up to its pend, one switch, `k_lifo_get()` |
 
-`lifo - fifo` at every scenario is minus the `list->tail` read (`sys_sflist_peek_tail()`) that
-`queue_insert()` makes under `is_append`, before its check for a waiting receiver. The insert
-position does not enter it: in `up` and `down` nothing is inserted, and in `self` the list is
-empty at every put, so no scenario inserts into a non-empty list.
+`down - up` is the rest and return of `k_lifo_put()` plus the sender's wait for its next start up
+to its pend, since both windows otherwise share the same `k_lifo_put()` up to readying the receiver, one
+switch, and the same rest of `k_lifo_get()`, and holds no work of the storage. `self - up` holds
+the storage path of both operations and no switch where `up` holds the waiting receiver path and
+one switch, so `self - up` never isolates the storage.
+
+| Test case | Load |
+| --- | --- |
+| `lifo` | message size |
+
+`k_lifo_put()` and `k_lifo_get()` carry the address of `test_item` at every `step` and copy none of
+its bytes.
+
+Scenarios are driven in the order of the general readme.
 
 ## Compensation
 
-No series of this test case times the same path without the transaction.
-
-## Analysis
-
-Expected: the `MESSAGE_SIZE_STEPS` series of one scenario agree, since no measured operation
-reads the message size. Expected: `lifo - fifo` < 0 and of the same size at `self`, `up` and
-`down`, since the `list->tail` read sits before the check for a waiting receiver.
+None.
 
 ## Configuration
 

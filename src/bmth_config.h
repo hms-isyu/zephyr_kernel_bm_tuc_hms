@@ -43,4 +43,12 @@
 
 #endif /* BMTH_CONFIG_H */
 
+/** @brief Minimum step size exponent. */
+#define BMTH_MEM_S_MIN (3U)
+
+/** @brief Maximum step size exponent. */
+#define BMTH_MEM_S_MAX (10U)
+
+#define BMTH_MEM_ARENA_MULTIPLIER (8U)
+
 /*!@}*/
