@@ -101,27 +101,22 @@ target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_ITC_PIPE_SYNC app PRIVATE
 # only file that knows which allocator is under test.
 target_sources_ifdef(CONFIG_BENCHMARK_TEST_MEM_SYS_HEAP app PRIVATE
                      src/mem/sys_heap/sys_heap.c
-                     src/mem/mem_harness.c
                      src/mem/mem_zephyr_main.c)
 
 target_sources_ifdef(CONFIG_BENCHMARK_TEST_MEM_K_HEAP app PRIVATE
                      src/mem/k_heap/k_heap.c
-                     src/mem/mem_harness.c
                      src/mem/mem_zephyr_main.c)
 
 target_sources_ifdef(CONFIG_BENCHMARK_TEST_MEM_K_MALLOC app PRIVATE
                      src/mem/k_malloc/k_malloc.c
-                     src/mem/mem_harness.c
                      src/mem/mem_zephyr_main.c)
 
 target_sources_ifdef(CONFIG_BENCHMARK_TEST_MEM_SLAB app PRIVATE
                      src/mem/mem_slab/mem_slab.c
-                     src/mem/mem_harness.c
                      src/mem/mem_zephyr_main.c)
 
 target_sources_ifdef(CONFIG_BENCHMARK_TEST_MEM_BLOCKS app PRIVATE
                      src/mem/mem_blocks/mem_blocks.c
-                     src/mem/mem_harness.c
                      src/mem/mem_zephyr_main.c)
 
 # mem_allocator.h and mem_harness.h are shared by all five: one workload, one
