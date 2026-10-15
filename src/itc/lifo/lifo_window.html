@@ -1,0 +1,324 @@
+<title>lifo Measurement Window</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one section per test readme; each holds the up and down sequence diagrams (time runs down, lanes by priority). */
+:root {
+  --bg: #f4f6f8;
+  --panel: #ffffff;
+  --fg: #18202b;
+  --muted: #5b6676;
+  --line: #cbd2dc;
+  --bar: #8a96a8;
+  --sem: #6447c4;
+  --itc: #087a6c;
+  --win: #f1b93a;
+  --win-a: 0.17;
+  --mark: #a85a05;
+  --copy-bg: #fde9ec;
+  --copy-fg: #a3293d;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10141a; --panel: #161c24; --fg: #e3e8ef; --muted: #95a1b2; --line: #2f3946; --bar: #5f6c80;
+    --sem: #a993ff; --itc: #3ccab5; --win: #f1b93a; --win-a: 0.11; --mark: #f0a24a;
+    --copy-bg: #3a1c24; --copy-fg: #ff9fb0; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10141a; --panel: #161c24; --fg: #e3e8ef; --muted: #95a1b2; --line: #2f3946; --bar: #5f6c80;
+  --sem: #a993ff; --itc: #3ccab5; --win: #f1b93a; --win-a: 0.11; --mark: #f0a24a;
+  --copy-bg: #3a1c24; --copy-fg: #ff9fb0; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1560px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 48px; display: grid; gap: 28px; }
+header { display: grid; gap: 14px; }
+h1 { font-size: 1.6rem; font-weight: 600; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h1 code, h2 code { font-family: var(--mono); }
+.lede { margin: 0; color: var(--muted); max-width: 72ch; }
+code { font-family: var(--mono); font-size: 0.92em; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.sw { width: 28px; height: 10px; display: inline-block; }
+.sw svg { display: block; }
+nav { display: flex; flex-wrap: wrap; gap: 8px; }
+nav a { font-family: var(--mono); font-size: 13px; color: var(--fg); text-decoration: none; padding: 4px 11px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); }
+nav a:hover, nav a:focus-visible { border-color: var(--itc); outline: none; }
+section { display: grid; gap: 12px; scroll-margin-top: 12px; }
+.sec-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+h2 { font-size: 1.25rem; margin: 0; font-weight: 600; }
+.path { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.sec-note { margin: 0; font-size: 13px; color: var(--muted); }
+h3 { margin: 4px 0 0; font-size: 13px; font-weight: 600; font-family: var(--mono); color: var(--muted); letter-spacing: 0.04em; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 640px), 1fr)); gap: 16px; }
+figure { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 12px 6px; display: grid; gap: 8px; min-width: 0; }
+figcaption { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.scn { font-family: var(--mono); font-weight: 600; font-size: 15px; }
+.rel { font-size: 12.5px; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+.chip { font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--mark); color: var(--fg); font-variant-numeric: tabular-nums; }
+.chip b { color: var(--mark); }
+.scroll { overflow-x: auto; }
+.scroll svg { display: block; width: 100%; min-width: 600px; height: auto; }
+footer { font-size: 12.5px; color: var(--muted); display: grid; gap: 4px; max-width: 90ch; }
+footer p { margin: 0; }
+
+/* SVG */
+.lifeline { stroke: var(--line); stroke-dasharray: 3 4; stroke-width: 1; }
+.lane-name { font-family: var(--mono); font-weight: 600; font-size: 14px; fill: var(--fg); }
+.lane-role { font-family: var(--sans); font-size: 11px; fill: var(--muted); }
+.bar { fill: var(--bar); }
+.code { font-family: var(--mono); font-size: 11px; fill: var(--fg); }
+.code.mark { fill: var(--mark); font-weight: 600; }
+.note { font-family: var(--sans); font-size: 11px; fill: var(--muted); font-style: italic; }
+.copy-r { fill: var(--copy-bg); stroke: var(--copy-fg); stroke-width: 0.8; }
+.copy-t { font-family: var(--mono); font-size: 10.5px; fill: var(--copy-fg); }
+.band { fill: var(--win); fill-opacity: var(--win-a); }
+.mline { stroke: var(--mark); stroke-width: 1; stroke-dasharray: 5 3; }
+.mtag-r { fill: var(--panel); stroke: var(--mark); stroke-width: 1; }
+.mtag-t { font-family: var(--mono); font-size: 10px; font-weight: 600; fill: var(--mark); }
+.arr line { stroke-width: 1.8; }
+.k-sem line { stroke: var(--sem); } .k-sem polygon, .k-sem circle { fill: var(--sem); }
+.k-itc line { stroke: var(--itc); } .k-itc polygon, .k-itc circle { fill: var(--itc); }
+.arr.out { opacity: 0.42; }
+.acall { font-family: var(--mono); font-size: 11.5px; font-weight: 600; paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
+.k-sem .acall { fill: var(--sem); } .k-itc .acall { fill: var(--itc); }
+.aeff { font-family: var(--sans); font-size: 10.5px; fill: var(--muted); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
+.badge-t { font-family: var(--sans); font-size: 10px; font-weight: 600; fill: var(--panel); }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1><code>lifo</code> measurement window: switches between <code>T_HIGH</code>, <code>T_LOW</code>, <code>T_ARM</code></h1>
+    <p class="lede">One steady-state transaction per scenario, time running downward. A horizontal arrow is a switch of the running task; its label is the call that issues it. Arrows inside the window are numbered. <code>T_ARM</code> is the control task (<code>T_ArmUp</code>, <code>T_ArmDown</code>). Zephyr: a lower number is a higher priority.</p>
+    <div class="legend">
+      <span><span class="sw"><svg width="28" height="10" viewBox="0 0 28 10"><line x1="0" y1="5" x2="22" y2="5" stroke="var(--sem)" stroke-width="2"/><polygon points="28,5 21,1 21,9" fill="var(--sem)"/></svg></span>switch issued by a semaphore call</span>
+      <span><span class="sw"><svg width="28" height="10" viewBox="0 0 28 10"><line x1="0" y1="5" x2="22" y2="5" stroke="var(--itc)" stroke-width="2"/><polygon points="28,5 21,1 21,9" fill="var(--itc)"/></svg></span>switch issued by the ITC primitive</span>
+      <span><span class="sw"><svg width="28" height="10" viewBox="0 0 28 10"><rect width="28" height="10" fill="var(--win)" fill-opacity="0.35"/><line x1="0" y1="0.5" x2="28" y2="0.5" stroke="var(--mark)" stroke-dasharray="5 3"/></svg></span>measurement window, START to STOP</span>
+      <span><span class="sw"><svg width="28" height="10" viewBox="0 0 28 10"><line x1="0" y1="5" x2="22" y2="5" stroke="var(--bar)" stroke-width="2" opacity="0.6"/><polygon points="28,5 21,1 21,9" fill="var(--bar)" opacity="0.6"/></svg></span>faded: switch outside every window</span>
+      <span><svg width="44" height="15" viewBox="0 0 44 15"><rect x="0.5" y="0.5" width="43" height="14" rx="3" class="copy-r"/><text x="22" y="11" text-anchor="middle" class="copy-t">copy</text></svg>byte copy of the message size</span>
+    </div>
+  </header>
+  <main id="main" style="display:grid;gap:36px"></main>
+  <footer>
+    <p><code>self</code> is not drawn: <code>T_SELF</code> is sender and receiver at once, and its window holds no switch.</p>
+    <p>Drawn from the test sources in <code>src/itc/lifo</code> and <code>zephyr/kernel</code> (<code>queue.c</code>, <code>sem.c</code>). The first transaction after a scenario starts also passes <code>k_event_wait_safe()</code>; the steady state is shown.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  const R = (lane, lines) => ({ t: 'run', lane, lines: lines.filter(Boolean) });
+  const S = (from, to, call, effect, kind) => ({ t: 'sw', from, to, call, effect, kind });
+  const M = id => ({ m: id });
+  const C = txt => ({ c: txt });
+  const N = txt => ({ n: txt });
+
+  const MARK = {
+    START:  { code: 'BMTH_GET_START_CNT()', tag: 'START' },
+    STOP:   { code: 'BMTH_GET_STOP_CNT()', tag: 'STOP' },
+    STOP_R: { code: 'BMTH_GET_STOP_CNT(…direct)', tag: 'STOP rx' },
+    STOP_S: { code: 'BMTH_GET_STOP_CNT(…rendezvous)', tag: 'STOP tx' }
+  };
+  const WIN_ASYNC = [{ to: 'STOP', label: 'START to STOP' }];
+  const WIN_SYNC = [
+    { to: 'STOP_R', label: 'START to receiver STOP' },
+    { to: 'STOP_S', label: 'START to sender STOP' }
+  ];
+  const ROLES = {
+    up:   { H: ['T_RecvUp', 'receiver, prio 2'], L: ['T_SendUp', 'sender, prio 3'], A: ['T_ArmUp', 'control task, prio 4'] },
+    down: { H: ['T_SendDown', 'sender, prio 2'], L: ['T_RecvDown', 'receiver, prio 3'], A: ['T_ArmDown', 'control task, prio 4'] }
+  };
+
+  /* o: { put, get, copy: null | 's' (in the send operation) | 'r' (in the receive operation), sync, armPre } */
+  function up(o) {
+    const x2 = o.sync ? ' ×2' : '';
+    return [
+      R('A', [o.armPre || N('next transaction')]),
+      S('A', 'H', 'k_sem_give(test_recv_sem)', 'readies T_HIGH', 'sem'),
+      R('H', ['k_sem_take() returns']),
+      S('H', 'A', o.get, 'pends, no message yet', 'itc'),
+      R('A', ['BMTH_mwindow_open()' + x2]),
+      S('A', 'L', 'k_sem_give(test_arm_sem)', 'readies T_LOW', 'sem'),
+      R('L', ['k_sem_take() returns', 'BMTH_RESET_COUNTER()', M('START'), o.copy === 's' && C(o.put + ': copy')]),
+      S('L', 'H', o.put, 'readies T_HIGH, reschedule', 'itc'),
+      R('H', [o.copy === 'r' && C(o.get + ': copy'), o.get + ' returns', M(o.sync ? 'STOP_R' : 'STOP')]),
+      S('H', 'L', 'k_sem_take(test_recv_sem)', 'pends', 'sem'),
+      R('L', [o.put + ' returns', o.sync && M('STOP_S')]),
+      S('L', 'A', 'k_sem_take(test_arm_sem)', 'pends', 'sem'),
+      R('A', ['BMTH_mseries_iterate()' + x2, 'BMTH_mwindow_close()' + x2])
+    ];
+  }
+  function down(o) {
+    const x2 = o.sync ? ' ×2' : '';
+    return [
+      R('A', [o.armPre || N('next transaction')]),
+      S('A', 'L', 'k_sem_give(test_recv_sem)', 'readies T_LOW', 'sem'),
+      R('L', ['k_sem_take() returns']),
+      S('L', 'A', o.get, 'pends, no message yet', 'itc'),
+      R('A', ['BMTH_mwindow_open()' + x2]),
+      S('A', 'H', 'k_sem_give(test_arm_sem)', 'readies T_HIGH', 'sem'),
+      R('H', ['k_sem_take() returns', 'BMTH_RESET_COUNTER()', M('START'),
+              o.copy === 's' && C(o.put + ': copy'),
+              N('readies T_LOW, no switch'),
+              o.put + ' returns', o.sync && M('STOP_S')]),
+      S('H', 'L', 'k_sem_take(test_arm_sem)', 'pends', 'sem'),
+      R('L', [o.copy === 'r' && C(o.get + ': copy'), o.get + ' returns', M(o.sync ? 'STOP_R' : 'STOP')]),
+      S('L', 'A', 'k_sem_take(test_recv_sem)', 'pends', 'sem'),
+      R('A', ['BMTH_mseries_iterate()' + x2, 'BMTH_mwindow_close()' + x2])
+    ];
+  }
+
+  /* k_mbox_put(): readies the receiver, then pends until the receiver has taken the message (mailbox.c) */
+  function mboxSyncUp() {
+    return [
+      R('A', ['arm_descriptors()']),
+      S('A', 'H', 'k_sem_give(test_recv_sem)', 'readies T_HIGH', 'sem'),
+      R('H', ['k_sem_take() returns']),
+      S('H', 'A', 'k_mbox_get()', 'pends, no message yet', 'itc'),
+      R('A', ['BMTH_mwindow_open() ×2']),
+      S('A', 'L', 'k_sem_give(test_arm_sem)', 'readies T_LOW', 'sem'),
+      R('L', ['k_sem_take() returns', 'BMTH_RESET_COUNTER()', M('START')]),
+      S('L', 'H', 'k_mbox_put()', 'readies T_HIGH, then pends', 'itc'),
+      R('H', [C('k_mbox_get(): copy'), N('readies T_LOW, no switch'), 'k_mbox_get() returns', M('STOP_R')]),
+      S('H', 'L', 'k_sem_take(test_recv_sem)', 'pends', 'sem'),
+      R('L', ['k_mbox_put() returns', M('STOP_S')]),
+      S('L', 'A', 'k_sem_take(test_arm_sem)', 'pends', 'sem'),
+      R('A', ['BMTH_mseries_iterate() ×2', 'BMTH_mwindow_close() ×2'])
+    ];
+  }
+  function mboxSyncDown() {
+    return [
+      R('A', ['arm_descriptors()']),
+      S('A', 'L', 'k_sem_give(test_recv_sem)', 'readies T_LOW', 'sem'),
+      R('L', ['k_sem_take() returns']),
+      S('L', 'A', 'k_mbox_get()', 'pends, no message yet', 'itc'),
+      R('A', ['BMTH_mwindow_open() ×2']),
+      S('A', 'H', 'k_sem_give(test_arm_sem)', 'readies T_HIGH', 'sem'),
+      R('H', ['k_sem_take() returns', 'BMTH_RESET_COUNTER()', M('START')]),
+      S('H', 'L', 'k_mbox_put()', 'readies T_LOW, then pends', 'itc'),
+      R('L', [C('k_mbox_get(): copy')]),
+      S('L', 'H', 'k_mbox_get()', 'readies T_HIGH, reschedule', 'itc'),
+      R('H', ['k_mbox_put() returns', M('STOP_S')]),
+      S('H', 'L', 'k_sem_take(test_arm_sem)', 'pends', 'sem'),
+      R('L', ['k_mbox_get() returns', M('STOP_R')]),
+      S('L', 'A', 'k_sem_take(test_recv_sem)', 'pends', 'sem'),
+      R('A', ['BMTH_mseries_iterate() ×2', 'BMTH_mwindow_close() ×2'])
+    ];
+  }
+
+  const pair = (o, win) => ({ up: up(o), down: down(o), win });
+
+  const SECTIONS = [
+    { id: 'lifo', readme: 'src/itc/lifo/README.md', note: 'k_lifo_put() and k_lifo_get() carry the address of test_item; no copy.',
+      cases: [{ name: null, ...pair({ put: 'k_lifo_put()', get: 'k_lifo_get()', copy: null }, WIN_ASYNC) }] }
+  ];
+
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const W = 840, TOP = 76;
+  const X = { H: 150, L: 385, A: 620 };
+  const LN = 17;
+
+  function render(steps, win, scn) {
+    let y = TOP;
+    const bars = [], txt = [], arrows = [], marks = {};
+    for (const st of steps) {
+      if (st.t === 'run') {
+        const x = X[st.lane];
+        const h = Math.max(1, st.lines.length) * LN + 10;
+        bars.push(`<rect class="bar" x="${x - 4}" y="${y}" width="8" height="${h}" rx="1.5"/>`);
+        st.lines.forEach((ln, i) => {
+          const by = y + 5 + LN * i + 12;
+          const tx = x + 14;
+          if (typeof ln === 'string') {
+            txt.push(`<text class="code" x="${tx}" y="${by}">${esc(ln)}</text>`);
+          } else if (ln.m) {
+            marks[ln.m] = by - 4;
+            txt.push(`<text class="code mark" x="${tx}" y="${by}">${esc(MARK[ln.m].code)}</text>`);
+          } else if (ln.c) {
+            const w = ln.c.length * 6.3 + 14;
+            txt.push(`<rect class="copy-r" x="${tx}" y="${by - 11}" width="${w}" height="15" rx="3"/>` +
+                     `<text class="copy-t" x="${tx + 7}" y="${by}">${esc(ln.c)}</text>`);
+          } else if (ln.n) {
+            txt.push(`<text class="note" x="${tx}" y="${by}">${esc(ln.n)}</text>`);
+          }
+        });
+        y += h;
+      } else {
+        arrows.push({ ...st, ay: y + 34 });
+        y += 46;
+      }
+    }
+    const H = y + 14;
+    const start = marks.START;
+    const stops = win.map(w => marks[w.to]);
+    const end = Math.max(...stops);
+    const counts = win.map((w, i) => arrows.filter(a => a.ay > start && a.ay < stops[i]).length);
+
+    let n = 0;
+    const arr = arrows.map(a => {
+      const inside = a.ay > start && a.ay < end;
+      const dir = X[a.to] > X[a.from] ? 1 : -1;
+      const x1 = X[a.from] + dir * 6, x2 = X[a.to] - dir * 6;
+      const cx = (x1 + x2) / 2;
+      let badge = '';
+      if (inside) {
+        n += 1;
+        const bx = x1 + dir * 14;
+        badge = `<circle cx="${bx}" cy="${a.ay}" r="8"/><text class="badge-t" x="${bx}" y="${a.ay + 3.5}" text-anchor="middle">${n}</text>`;
+      }
+      return `<g class="arr k-${a.kind}${inside ? '' : ' out'}">` +
+        `<text class="acall" x="${cx}" y="${a.ay - 19}" text-anchor="middle">${esc(a.call)}</text>` +
+        `<text class="aeff" x="${cx}" y="${a.ay - 7}" text-anchor="middle">${esc(a.effect)}</text>` +
+        `<line x1="${x1}" y1="${a.ay}" x2="${x2 - dir * 7}" y2="${a.ay}"/>` +
+        `<polygon points="${x2},${a.ay} ${x2 - dir * 9},${a.ay - 5} ${x2 - dir * 9},${a.ay + 5}"/>` +
+        badge + `</g>`;
+    });
+
+    const lanes = ['H', 'L', 'A'].map(k => {
+      const name = k === 'H' ? 'T_HIGH' : k === 'L' ? 'T_LOW' : 'T_ARM';
+      const role = ROLES[scn][k];
+      return `<text class="lane-name" x="${X[k]}" y="22" text-anchor="middle">${name}</text>` +
+        `<text class="lane-role" x="${X[k]}" y="39" text-anchor="middle">${esc(role[0])}</text>` +
+        `<text class="lane-role" x="${X[k]}" y="53" text-anchor="middle">${esc(role[1])}</text>` +
+        `<line class="lifeline" x1="${X[k]}" y1="62" x2="${X[k]}" y2="${H - 6}"/>`;
+    }).join('');
+
+    const markLines = Object.keys(marks).map(id => {
+      const my = marks[id], tag = MARK[id].tag, tw = tag.length * 6.4 + 12;
+      return `<line class="mline" x1="0" y1="${my}" x2="${W}" y2="${my}"/>` +
+        `<rect class="mtag-r" x="4" y="${my - 8}" width="${tw}" height="16" rx="3"/>` +
+        `<text class="mtag-t" x="${4 + tw / 2}" y="${my + 3.5}" text-anchor="middle">${tag}</text>`;
+    }).join('');
+
+    const svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${scn} scenario sequence">` +
+      `<rect class="band" x="0" y="${start}" width="${W}" height="${end - start}"/>` +
+      lanes + markLines + bars.join('') + txt.join('') + arr.join('') + `</svg>`;
+    const chips = win.map((w, i) =>
+      `<span class="chip">${esc(w.label)}: <b>${counts[i]}</b> ${counts[i] === 1 ? 'switch' : 'switches'}</span>`).join('');
+    return { svg, chips };
+  }
+
+  const main = document.getElementById('main');
+  for (const sec of SECTIONS) {
+    let html = `<section id="${sec.id}"><div class="sec-head">` +
+      `<span class="path">${esc(sec.readme)}</span></div><p class="sec-note">${esc(sec.note)}</p>`;
+    for (const c of sec.cases) {
+      if (c.name) html += `<h3>${esc(c.name)}</h3>`;
+      html += '<div class="grid">';
+      for (const scn of ['up', 'down']) {
+        const r = render(c[scn], c.win, scn);
+        const rel = scn === 'up' ? 'receiver &gt; sender: T_LOW sends, T_HIGH receives' : 'sender &gt; receiver: T_HIGH sends, T_LOW receives';
+        html += `<figure><figcaption><span class="scn">${scn}</span><span class="rel">${rel}</span>` +
+          `<div class="chips">${r.chips}</div></figcaption><div class="scroll">${r.svg}</div></figure>`;
+      }
+      html += '</div>';
+    }
+    html += '</section>';
+    main.insertAdjacentHTML('beforeend', html);
+  }
+})();
+</script>
