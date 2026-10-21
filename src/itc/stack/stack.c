@@ -351,9 +351,6 @@ int main(void)
 
   BMTH_ENABLE_COUNTERS();
 
-  SYSCON->LPCAC_CTRL |=
-    (SYSCON_LPCAC_CTRL_DIS_LPCAC_MASK | SYSCON_LPCAC_CTRL_CLR_LPCAC_MASK);
-
   BMTH_disable_sys_tick();
 
   if (!BMTH_check_read_validity(NULL, MEASUREMENT_COUNT))

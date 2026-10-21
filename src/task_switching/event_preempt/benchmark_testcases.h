@@ -27,7 +27,7 @@
 #define TEST_CASE_IV (4U)
 
 #ifndef TEST_CASE
-#define TEST_CASE (TEST_CASE_IV) /* Select the test case to run */
+#define TEST_CASE (TEST_CASE_II) /* Select the test case to run */
 #endif
 
 #if (TEST_CASE == TEST_CASE_I)
