@@ -27,6 +27,7 @@
 
 #include "benchmark_tools_hms.h"
 #include "benchmark_testcases.h"
+#include "sim_measure.h"
 
 /*******************************************************************************
  * Definitions
@@ -59,6 +60,12 @@ static BMTH_time_marker_t test_stop_time  = 0U;
 static BMTH_measurement_series_t scenario_a = {
   .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
 static BMTH_measurement_series_t scenario_b = {
+  .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
+static BMTH_measurement_series_t z_swap_overhead = {
+  .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
+static BMTH_measurement_series_t take_tail = {
+  .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
+static BMTH_measurement_series_t give_tail = {
   .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
 
 /* Possible overhead values measurement */
@@ -333,6 +340,17 @@ int main(void)
   BMTH_mseries_initialize(
     &scenario_b, 0, NULL,
     BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
+
+  /* S_B: the k_sem_give() tail without a switch, from the irq_unlock(). */
+  measure_give_tail_no_swap_overhead(&give_tail, MEASUREMENT_COUNT,
+                                     TEST_SB_HAS_WAITER);
+
+  /* S_A: the k_sem_take() tail of H_Task_SA, after it regains the CPU. */
+  measure_take_tail_overhead(&take_tail, MEASUREMENT_COUNT);
+
+  /* S_A: the swap chain up to the irq_unlock() where PendSV would fire. */
+  measure_sem_z_swap_overhead(&z_swap_overhead, MEASUREMENT_COUNT,
+                              SIM_Z_SWAP_PROLOGUE);
 
   BMTH_signalize_mseries_start();
 

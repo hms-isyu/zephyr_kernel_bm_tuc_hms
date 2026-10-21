@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sem_block: simulation vs kernel</title>
+<style>
+:root{
+  --bg:#ffffff; --fg:#1b1f24; --muted:#6a737d; --line:#d8dee4; --head:#f2f4f7;
+  --code:#24292f; --alias:#8250df; --addr:#57606a;
+  --win:#fff6d5; --mark:#c25e00; --markbg:#fff1e3;
+  --isr:#0a5ca8; --isrbg:#e4f0fb; --fold:#f6f8fa;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; --head:#161b22;
+  --code:#e6edf3; --alias:#d2a8ff; --addr:#8b949e;
+  --win:#3a3213; --mark:#ff9d4d; --markbg:#3d2410;
+  --isr:#79c0ff; --isrbg:#12283f; --fold:#161b22;}}
+:root[data-theme="dark"]{
+  --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; --head:#161b22;
+  --code:#e6edf3; --alias:#d2a8ff; --addr:#8b949e;
+  --win:#3a3213; --mark:#ff9d4d; --markbg:#3d2410;
+  --isr:#79c0ff; --isrbg:#12283f; --fold:#161b22;}
+body{background:var(--bg);color:var(--fg);margin:0;padding:2rem 1.25rem 4rem;
+  font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;}
+main{max-width:1220px;margin:0 auto;}
+h1{font-size:1.4rem;margin:0 0 .3rem;letter-spacing:-.01em;}
+h2{font-size:1.05rem;margin:2.6rem 0 .3rem;letter-spacing:-.01em;}
+.lead{color:var(--muted);margin:0 0 1.2rem;font-size:.92rem;}
+.sub{color:var(--muted);margin:0 0 .8rem;font-size:.88rem;}
+.legend{display:flex;flex-wrap:wrap;gap:.5rem 1.1rem;margin:0 0 1.4rem;
+  font-size:.82rem;color:var(--muted);}
+.legend span{display:inline-flex;align-items:center;gap:.4rem;}
+.sw{width:.85rem;height:.85rem;border-radius:3px;border:1px solid var(--line);
+  display:inline-block;}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:8px;}
+table{border-collapse:collapse;width:100%;font-size:12.5px;}
+th{background:var(--head);text-align:left;padding:.5rem .7rem;font-weight:600;
+  border-bottom:1px solid var(--line);white-space:nowrap;}
+td{padding:.22rem .7rem;border-bottom:1px solid var(--line);vertical-align:top;}
+td.c{font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+  white-space:pre;color:var(--code);}
+td.win{background:var(--win);}
+td.rn{color:var(--addr);text-align:right;padding:.22rem .55rem;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
+  font-size:11px;font-variant-numeric:tabular-nums;
+  user-select:none;white-space:nowrap;}
+th.rn{text-align:right;}
+tr.frame td{background:var(--fold);font-size:11.5px;color:var(--muted);
+  padding:.38rem .7rem;border-top:1px solid var(--line);}
+tr.frame b{color:var(--fg);}
+table.desc{border-collapse:collapse;width:100%;font-size:12px;margin:.2rem 0 1.2rem;}
+table.desc caption{caption-side:top;text-align:left;font-size:.8rem;
+  font-weight:600;color:var(--fg);padding:0 0 .35rem;letter-spacing:.01em;}
+table.desc thead th{background:var(--head);font-size:11.5px;padding:.35rem .6rem;
+  border-bottom:1px solid var(--line);vertical-align:bottom;}
+table.desc th.rl{width:15rem;text-align:left;vertical-align:top;
+  background:transparent;font-weight:600;color:var(--fg);white-space:normal;
+  padding:.3rem .6rem;border-bottom:1px solid var(--line);}
+table.desc td{vertical-align:top;color:var(--muted);padding:.3rem .6rem;
+  border-bottom:1px solid var(--line);}
+table.desc td.full{color:var(--muted);}
+.badge{display:inline-block;border:1.5px solid var(--mark);color:var(--mark);
+  border-radius:3px;padding:0 .35rem;margin-right:.5rem;font-size:10px;
+  font-weight:800;letter-spacing:.06em;vertical-align:1px;}
+.badge.isr{border-color:var(--isr);color:var(--isr);}
+.alias{color:var(--alias);}
+.addr{color:var(--addr);}
+.prov{margin-top:2.8rem;font-size:.82rem;color:var(--muted);
+  border-top:1px solid var(--line);padding-top:.9rem;}
+.prov h3{font-size:.9rem;color:var(--fg);margin:0 0 .5rem;}
+.prov dt{font-weight:600;color:var(--fg);margin-top:.5rem;}
+.prov dd{margin:.1rem 0 0 0;}
+code{font-family:ui-monospace,Consolas,monospace;font-size:.9em;}
+</style>
+</head><body>
+<main>
+<h1>sem_block: simulation vs kernel</h1>
+<p class="lead">One table per measurement that <code>zephyr_sim.c</code> in this folder provides: for <code>S_A</code> the swap prologue and the tail of <code>k_sem_give()</code>, for <code>S_B</code> the <code>K_NO_WAIT</code> tail of <code>k_sem_take()</code>. Reconstruction from the linked listing, not a recording.</p>
+
+<div class="legend">
+  <span><i class="sw" style="background:var(--win)"></i>measurement window</span>
+  <span><span class="badge">START</span><span class="badge">STOP</span>counter capture: the probe itself, outside the window</span>
+  <span><span class="badge isr">PendSV</span>the thread leaves and regains the CPU here</span>
+  <span><i class="sw" style="background:var(--fold)"></i>frame divider</span>
+</div>
+<h2>S_A: z_swap prologue  (measure_sem_z_swap_overhead, SIM_Z_SWAP_PROLOGUE)</h2>
+<p class="sub">The half of the swap chain that runs before the thread leaves the CPU, entered from <code>z_pend_curr()</code> on the blocking <code>k_sem_take()</code>. The simulation captures the stop counter after the <code>msr BASEPRI</code> where the kernel takes PendSV.</p>
+<table class="desc"><caption>Scope of this comparison</caption><tbody><tr><th class="rl">Important</th><td class="full" colspan="2">the kernel <code>isb sy</code> after the <code>msr BASEPRI</code> in <code>z_swap_irqlock()</code> has no counterpart in the simulated prologue, on purpose. It runs once per switch and is compensated in the tail, by <code>SIM_INSTRUCTION_FLUSH()</code> in <code>sim_arch_swap_tail()</code>. Adding it to the prologue would count it twice.</td></tr><tr><th class="rl">Belongs to</th><td class="full" colspan="2"><code>S_A</code>, the <code>k_sem_take(&amp;test_sem, K_FOREVER)</code> of <code>H_Task_SA</code>. Kernel path: <code>z_impl_k_sem_take()</code>, <code>z_pend_curr()</code>, <code>z_swap_irqlock()</code> up to the <code>msr BASEPRI</code> where PendSV is taken. Simulated by <code>sim_z_swap_irqlock_prologue()</code>.</td></tr><tr><th class="rl">Binaries</th><td class="full" colspan="2">both sides from the linked <code>build/zephyr/zephyr.elf</code>; addresses are linked addresses, so the 4-byte alignment of every instruction is the one the target executes.</td></tr><tr><th class="rl">Instructions in the window</th><td class="full" colspan="2">kernel 12, simulation 11; of the rows with both sides in the window, 10 sit at the same address modulo 4; row 9 differs: kernel 30003d8e, simulation 30001604.</td></tr><tr><th class="rl">Known omissions</th><td class="full" colspan="2">one instruction, row 17: the <code>orr.w</code> at <code>z_swap_irqlock</code> +10 that sets <code>PENDSVSET</code> in the value stored back to <code>SCB-&gt;ICSR</code>. <code>sim_arch_swap_prologue()</code> writes <code>SCB-&gt;ICSR |= (0UL &lt;&lt; SCB_ICSR_PENDSVSET_Pos)</code>; the compiler removes an OR with 0, so the load and the store have counterparts and the <code>orr.w</code> has none.</td></tr><tr><th class="rl">Outside the window</th><td class="full" colspan="2">the <code>isb sy</code> at <code>z_swap_irqlock</code> +1c, row 21. The thread leaves the CPU at the <code>msr BASEPRI</code> and regains it on this <code>isb</code> (see <code>event_preempt/doc/sim_vs_kernel.html</code>), so it executes after PendSV returns.</td></tr><tr><th class="rl">Register allocation</th><td class="full" colspan="2"><code>r2</code> and <code>r3</code> swap roles between the two frames; widths and offsets are the same up to <code>z_swap_irqlock</code> +10, after which the simulation runs 4 bytes ahead (the missing <code>orr.w</code>).</td></tr><tr><th class="rl">Before the window, not shown</th><td class="full" colspan="2"><code>z_pend_curr</code> +00..+20 (lock, <code>pend_locked</code>, argument set-up).</td></tr><tr><th class="rl">Off-path, excluded</th><td class="full" colspan="2"><code>z_swap_irqlock</code> +20..+24 and <code>sim_z_swap_irqlock_prologue</code> +20..+24, the reload of <code>arch.swap_return_value</code> and the return, which belong to the tail.</td></tr></tbody></table>
+<div class="scroll"><table>
+<thead><tr><th class="rn">#</th><th>Zephyr kernel</th><th>Simulation</th></tr></thead>
+<tbody>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem"><b>z_pend_curr</b> in &nbsp;|&nbsp; <b>measure_sem_z_swap_overhead</b> in</td></tr>
+<tr><td class="rn">1</td><td class="c"></td><td class="c"><span class="alias">probe</span> <span class="addr">300015f0</span>  ldr r3, [pc, #124]</td></tr>
+<tr><td class="rn">2</td><td class="c"></td><td class="c"><span class="alias">probe</span> <span class="addr">300015f2</span>  movs r0, #0</td></tr>
+<tr><td class="rn">3</td><td class="c"></td><td class="c"><span class="alias">probe</span> <span class="addr">300015f4</span>  str r0, [r3, #4]</td></tr>
+<tr><td class="rn">4</td><td class="c"></td><td class="c"><span class="alias">probe</span> <span class="addr">300015f6</span>  dsb sy</td></tr>
+<tr><td class="rn">5</td><td class="c"></td><td class="c"><span class="alias">probe</span> <span class="addr">300015fa</span>  isb sy</td></tr>
+<tr><td class="rn">6</td><td class="c"></td><td class="c"><span class="badge">START</span><span class="alias">probe</span> <span class="addr">300015fe</span>  ldr r2, [r3, #4]</td></tr>
+<tr><td class="rn">7</td><td class="c"></td><td class="c"><span class="alias">probe</span> <span class="addr">30001600</span>  ldr r3, [pc, #112]</td></tr>
+<tr><td class="rn">8</td><td class="c"></td><td class="c"><span class="alias">probe</span> <span class="addr">30001602</span>  str r2, [r3, #0]</td></tr>
+<tr><td class="rn">9</td><td class="c win"><span class="alias">pend</span> <span class="addr">30003d8e</span>  bl 30003954 &lt;z_swap_irqlock&gt;</td><td class="c win"><span class="alias">probe</span> <span class="addr">30001604</span>  bl 300014a4 &lt;sim_z_swap_irqlock_prologue&gt;</td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:2.1rem"><b>z_swap_irqlock</b> calls &nbsp;|&nbsp; <b>sim_z_swap_irqlock_prologue</b> calls</td></tr>
+<tr><td class="rn">10</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003954</span>  ldr r2, [pc, #36]</td><td class="c win"><span class="alias">swap</span> <span class="addr">300014a4</span>  ldr r3, [pc, #36]</td></tr>
+<tr><td class="rn">11</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003956</span>  ldr r3, [r2, #8]</td><td class="c win"><span class="alias">swap</span> <span class="addr">300014a6</span>  ldr r2, [r3, #8]</td></tr>
+<tr><td class="rn">12</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003958</span>  str r0, [r3, #112]</td><td class="c win"><span class="alias">swap</span> <span class="addr">300014a8</span>  str r0, [r2, #112]</td></tr>
+<tr><td class="rn">13</td><td class="c win"><span class="alias">swap</span> <span class="addr">3000395a</span>  mvn.w r1, #10</td><td class="c win"><span class="alias">swap</span> <span class="addr">300014aa</span>  mvn.w r1, #10</td></tr>
+<tr><td class="rn">14</td><td class="c win"><span class="alias">swap</span> <span class="addr">3000395e</span>  str r1, [r3, #116]</td><td class="c win"><span class="alias">swap</span> <span class="addr">300014ae</span>  str r1, [r2, #116]</td></tr>
+<tr><td class="rn">15</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003960</span>  ldr r1, [pc, #28]</td><td class="c win"><span class="alias">swap</span> <span class="addr">300014b0</span>  ldr r2, [pc, #28]</td></tr>
+<tr><td class="rn">16</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003962</span>  ldr r3, [r1, #4]</td><td class="c win"><span class="alias">swap</span> <span class="addr">300014b2</span>  ldr r1, [r2, #4]</td></tr>
+<tr><td class="rn">17</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003964</span>  orr.w r3, r3, #268435456</td><td class="c"></td></tr>
+<tr><td class="rn">18</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003968</span>  str r3, [r1, #4]</td><td class="c win"><span class="alias">swap</span> <span class="addr">300014b4</span>  str r1, [r2, #4]</td></tr>
+<tr><td class="rn">19</td><td class="c win"><span class="alias">swap</span> <span class="addr">3000396a</span>  movs r3, #0</td><td class="c win"><span class="alias">swap</span> <span class="addr">300014b6</span>  movs r2, #0</td></tr>
+<tr><td class="rn">20</td><td class="c win"><span class="badge isr">PendSV FIRES</span><span class="alias">swap</span> <span class="addr">3000396c</span>  msr BASEPRI, r3</td><td class="c win"><span class="alias">swap</span> <span class="addr">300014b8</span>  msr BASEPRI, r2</td></tr>
+<tr><td class="rn">21</td><td class="c"><span class="badge isr">PendSV RETURN</span><span class="alias">swap</span> <span class="addr">30003970</span>  isb sy</td><td class="c"></td></tr>
+<tr><td class="rn">22</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">300014bc</span>  ldr r2, [pc, #20]</td></tr>
+<tr><td class="rn">23</td><td class="c"></td><td class="c"><span class="badge">STOP</span><span class="alias">swap</span> <span class="addr">300014be</span>  ldr r1, [r2, #4]</td></tr>
+<tr><td class="rn">24</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">300014c0</span>  ldr r2, [pc, #20]</td></tr>
+<tr><td class="rn">25</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">300014c2</span>  str r1, [r2, #0]</td></tr>
+</tbody></table></div>
+
+<h2>S_A: give tail  (measure_give_tail_overhead)</h2>
+<p class="sub">The half of the switch that runs after <code>L_Task_SA</code> regains the CPU: the return out of <code>z_swap_irqlock()</code> and the epilogues of <code>reschedule()</code>, <code>z_reschedule()</code> and <code>z_impl_k_sem_give()</code>, up to the stop capture.</p>
+<table class="desc"><caption>Scope of this comparison</caption><tbody><tr><th class="rl">Belongs to</th><td class="full" colspan="2"><code>S_A</code>, the <code>k_sem_give(&amp;test_sem)</code> of <code>L_Task_SA</code> that woke <code>H_Task_SA</code> in the previous iteration. <code>L_Task_SA</code> left the CPU inside it and regains it when <code>H_Task_SA</code> blocks. Kernel path, returning: <code>z_swap_irqlock()</code> from the PendSV return, <code>reschedule()</code>, <code>z_reschedule()</code>, <code>z_impl_k_sem_give()</code>, back to <code>L_Task_SA</code>. Simulated by <code>sim_z_swap_irqlock_tail()</code>, <code>sim_reschedule_swap_tail()</code>, <code>sim_z_reschedule_swap_tail()</code>, <code>sim_z_impl_k_sem_give_tail()</code>.</td></tr><tr><th class="rl">Binaries</th><td class="full" colspan="2">both sides from the linked <code>build/zephyr/zephyr.elf</code>; addresses are linked addresses, so the 4-byte alignment of every instruction is the one the target executes.</td></tr><tr><th class="rl">Instructions in the window</th><td class="full" colspan="2">kernel 8, simulation 8; 8 rows with the same mnemonic, 0 of them differing only in register names; 7 rows at the same address modulo 4; row 15 differs: kernel 30005848, simulation 300046d6.</td></tr><tr><th class="rl">Kernel STOP</th><td class="full" colspan="2">row 18 is the <code>S_A</code> stop capture in <code>L_Task_SA</code>; the matching start capture is in <code>H_Task_SA</code>, before its <code>k_sem_take()</code>. <code>L_Task_SA</code> reloads the counter base from the literal pool first (row 17); the probe holds it in a register.</td></tr><tr><th class="rl">Before the window, not shown</th><td class="full" colspan="2"><code>z_impl_k_sem_give</code> +00..+44 (lock, unpend, ready, call set-up), <code>reschedule</code> +00..+16 (key test, IPSR test, ready-queue compare, the call); <code>sim_z_impl_k_sem_give_tail</code> +00..+08, <code>sim_reschedule_swap_tail</code> +00..+16, <code>sim_z_swap_irqlock_tail</code> +00..+06 (key store).</td></tr><tr><th class="rl">Off-path, excluded</th><td class="full" colspan="2"><code>z_impl_k_sem_give</code> +4a..+64, the no-waiter arm; <code>reschedule</code> and <code>sim_reschedule_swap_tail</code> +1c..+20 and +26..+2e, the no-swap arms.</td></tr></tbody></table>
+<div class="scroll"><table>
+<thead><tr><th class="rn">#</th><th>Zephyr kernel</th><th>Simulation</th></tr></thead>
+<tbody>
+<tr class="frame"><td colspan="3" style="padding-left:4.9rem"><b>z_swap_irqlock</b> in &nbsp;|&nbsp; <b>sim_z_swap_irqlock_tail</b> in</td></tr>
+<tr><td class="rn">1</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">300014e4</span>  ldr r3, [pc, #36]</td></tr>
+<tr><td class="rn">2</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">300014e6</span>  movs r1, #0</td></tr>
+<tr><td class="rn">3</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">300014e8</span>  str r1, [r3, #4]</td></tr>
+<tr><td class="rn">4</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">300014ea</span>  dsb sy</td></tr>
+<tr><td class="rn">5</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">300014ee</span>  isb sy</td></tr>
+<tr><td class="rn">6</td><td class="c"></td><td class="c"><span class="badge">START</span><span class="alias">swap</span> <span class="addr">300014f2</span>  ldr r1, [r3, #4]</td></tr>
+<tr><td class="rn">7</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">300014f4</span>  ldr r3, [pc, #24]</td></tr>
+<tr><td class="rn">8</td><td class="c"></td><td class="c"><span class="alias">swap</span> <span class="addr">300014f6</span>  str r1, [r3, #0]</td></tr>
+<tr><td class="rn">9</td><td class="c win"><span class="badge isr">PendSV RETURN</span><span class="alias">swap</span> <span class="addr">30003970</span>  isb sy</td><td class="c win"><span class="alias">swap</span> <span class="addr">300014f8</span>  isb sy</td></tr>
+<tr><td class="rn">10</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003974</span>  ldr r3, [r2, #8]</td><td class="c win"><span class="alias">swap</span> <span class="addr">300014fc</span>  ldr r3, [r2, #8]</td></tr>
+<tr><td class="rn">11</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003976</span>  ldr r0, [r3, #116]</td><td class="c win"><span class="alias">swap</span> <span class="addr">300014fe</span>  ldr r0, [r3, #116]</td></tr>
+<tr><td class="rn">12</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003978</span>  bx lr</td><td class="c win"><span class="alias">swap</span> <span class="addr">30001500</span>  bx lr</td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:3.5rem"><b>reschedule</b> returns to &nbsp;|&nbsp; <b>sim_reschedule_swap_tail</b> returns to</td></tr>
+<tr><td class="rn">13</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003a3e</span>  b.n 30003a48 &lt;reschedule+0x24&gt;</td><td class="c win"><span class="alias">resched</span> <span class="addr">3000152e</span>  b.n 30001538 &lt;sim_reschedule_swap_tail+0x24&gt;</td></tr>
+<tr><td class="rn">14</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003a48</span>  pop {r3, pc}</td><td class="c win"><span class="alias">resched</span> <span class="addr">30001538</span>  pop {r3, pc}</td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:2.1rem"><b>z_reschedule</b> returns to &nbsp;|&nbsp; <b>sim_z_reschedule_swap_tail</b> returns to</td></tr>
+<tr><td class="rn">15</td><td class="c win"><span class="alias">z_resched</span> <span class="addr">30005848</span>  pop {r3, pc}</td><td class="c win"><span class="alias">z_resched</span> <span class="addr">300046d6</span>  pop {r3, pc}</td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem"><b>z_impl_k_sem_give</b> returns to &nbsp;|&nbsp; <b>sim_z_impl_k_sem_give_tail</b> returns to</td></tr>
+<tr><td class="rn">16</td><td class="c win"><span class="alias">give</span> <span class="addr">300037dc</span>  pop {r4, r5, r6, pc}</td><td class="c win"><span class="alias">give</span> <span class="addr">30001554</span>  pop {r4, r5, r6, pc}</td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem"><b>L_Task_SA</b> returns to &nbsp;|&nbsp; <b>measure_give_tail_overhead</b> returns to</td></tr>
+<tr><td class="rn">17</td><td class="c"><span class="alias">lsa</span> <span class="addr">3000111c</span>  ldr r3, [pc, #36]</td><td class="c"></td></tr>
+<tr><td class="rn">18</td><td class="c"><span class="badge">STOP</span><span class="alias">lsa</span> <span class="addr">3000111e</span>  ldr r2, [r3, #4]</td><td class="c"><span class="badge">STOP</span><span class="alias">probe</span> <span class="addr">3000174c</span>  ldr r2, [r6, #4]</td></tr>
+<tr><td class="rn">19</td><td class="c"><span class="alias">lsa</span> <span class="addr">30001120</span>  ldr r3, [pc, #36]</td><td class="c"><span class="alias">probe</span> <span class="addr">3000174e</span>  ldr r3, [pc, #36]</td></tr>
+<tr><td class="rn">20</td><td class="c"><span class="alias">lsa</span> <span class="addr">30001122</span>  str r2, [r3, #0]</td><td class="c"><span class="alias">probe</span> <span class="addr">30001750</span>  str r2, [r3, #0]</td></tr>
+</tbody></table></div>
+
+<h2>S_B: no-wait tail  (measure_take_tail_no_wait_overhead)</h2>
+<p class="sub">A <code>K_NO_WAIT</code> take on an empty semaphore: the thread never pends and never reaches the scheduler. The tail is the mask restore, the <code>-EBUSY</code> return value and the return. There is no PendSV boundary on this path.</p>
+<table class="desc"><caption>Scope of this comparison</caption><tbody><tr><th class="rl">Belongs to</th><td class="full" colspan="2"><code>S_B</code>, the <code>k_sem_take(&amp;test_sem, K_NO_WAIT)</code> of <code>H_Task_SB</code>. Kernel path: <code>z_impl_k_sem_take()</code>, <code>K_NO_WAIT</code> arm, from the mask restore to the return. Simulated by <code>sim_z_impl_k_sem_take_tail()</code>.</td></tr><tr><th class="rl">Binaries</th><td class="full" colspan="2">both sides from the linked <code>build/zephyr/zephyr.elf</code>; addresses are linked addresses, so the 4-byte alignment of every instruction is the one the target executes.</td></tr><tr><th class="rl">Instructions in the window</th><td class="full" colspan="2">kernel 6, simulation 6; 6 rows with the same mnemonic, 0 of them differing only in register names; 6 rows at the same address modulo 4.</td></tr><tr><th class="rl">Branch into the arm</th><td class="full" colspan="2"><code>beq.n</code> at <code>z_impl_k_sem_take</code> +2c jumps over 3000382e..3000383b, 6 instructions not executed (the pend arm); <code>beq.n</code> at <code>sim_z_impl_k_sem_take_tail</code> +2c jumps over 3000158e..3000159b, 6 instructions not executed. Both branches sit before the window.</td></tr><tr><th class="rl">Kernel STOP</th><td class="full" colspan="2">row 15 is the <code>S_B</code> stop capture in <code>H_Task_SB</code>; the matching start capture sits before the call, outside this table.</td></tr><tr><th class="rl">Stop capture width</th><td class="full" colspan="2">row 15: the probe holds the counter base in <code>r9</code> and reads with <code>ldr.w</code> (32-bit); <code>H_Task_SB</code> holds it in <code>r4</code> and reads with <code>ldr</code> (16-bit). Both start on a word boundary.</td></tr><tr><th class="rl">Before the window, not shown</th><td class="full" colspan="2"><code>z_impl_k_sem_take</code> +00..+14 and +28..+2c, the same ranges in <code>sim_z_impl_k_sem_take_tail</code> (entry, lock, count test, timeout test): 10 instructions, identical text.</td></tr><tr><th class="rl">Off-path, excluded</th><td class="full" colspan="2">+16..+22 in both takes, the count-available arm; +2e..+3a, the pend arm.</td></tr></tbody></table>
+<div class="scroll"><table>
+<thead><tr><th class="rn">#</th><th>Zephyr kernel</th><th>Simulation</th></tr></thead>
+<tbody>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem"><b>z_impl_k_sem_take</b> in &nbsp;|&nbsp; <b>sim_z_impl_k_sem_take_tail</b> in</td></tr>
+<tr><td class="rn">1</td><td class="c"></td><td class="c"><span class="alias">take</span> <span class="addr">3000159c</span>  ldr r3, [pc, #36]</td></tr>
+<tr><td class="rn">2</td><td class="c"></td><td class="c"><span class="alias">take</span> <span class="addr">3000159e</span>  movs r2, #0</td></tr>
+<tr><td class="rn">3</td><td class="c"></td><td class="c"><span class="alias">take</span> <span class="addr">300015a0</span>  str r2, [r3, #4]</td></tr>
+<tr><td class="rn">4</td><td class="c"></td><td class="c"><span class="alias">take</span> <span class="addr">300015a2</span>  dsb sy</td></tr>
+<tr><td class="rn">5</td><td class="c"></td><td class="c"><span class="alias">take</span> <span class="addr">300015a6</span>  isb sy</td></tr>
+<tr><td class="rn">6</td><td class="c"></td><td class="c"><span class="badge">START</span><span class="alias">take</span> <span class="addr">300015aa</span>  ldr r2, [r3, #4]</td></tr>
+<tr><td class="rn">7</td><td class="c"></td><td class="c"><span class="alias">take</span> <span class="addr">300015ac</span>  ldr r3, [pc, #24]</td></tr>
+<tr><td class="rn">8</td><td class="c"></td><td class="c"><span class="alias">take</span> <span class="addr">300015ae</span>  str r2, [r3, #0]</td></tr>
+<tr><td class="rn">9</td><td class="c win"><span class="alias">take</span> <span class="addr">3000383c</span>  msr BASEPRI, r1</td><td class="c win"><span class="alias">take</span> <span class="addr">300015b0</span>  msr BASEPRI, r1</td></tr>
+<tr><td class="rn">10</td><td class="c win"><span class="alias">take</span> <span class="addr">30003840</span>  isb sy</td><td class="c win"><span class="alias">take</span> <span class="addr">300015b4</span>  isb sy</td></tr>
+<tr><td class="rn">11</td><td class="c win"><span class="alias">take</span> <span class="addr">30003844</span>  mvn.w r0, #15</td><td class="c win"><span class="alias">take</span> <span class="addr">300015b8</span>  mvn.w r0, #15</td></tr>
+<tr><td class="rn">12</td><td class="c win"><span class="alias">take</span> <span class="addr">30003848</span>  b.n 30003824 &lt;z_impl_k_sem_take+0x24&gt;</td><td class="c win"><span class="alias">take</span> <span class="addr">300015bc</span>  b.n 30001584 &lt;sim_z_impl_k_sem_take_tail+0x24&gt;</td></tr>
+<tr><td class="rn">13</td><td class="c win"><span class="alias">take</span> <span class="addr">30003824</span>  add sp, #8</td><td class="c win"><span class="alias">take</span> <span class="addr">30001584</span>  add sp, #8</td></tr>
+<tr><td class="rn">14</td><td class="c win"><span class="alias">take</span> <span class="addr">30003826</span>  pop {r4, pc}</td><td class="c win"><span class="alias">take</span> <span class="addr">30001586</span>  pop {r4, pc}</td></tr>
+<tr class="frame"><td colspan="3" style="padding-left:0.7rem"><b>H_Task_SB</b> returns to &nbsp;|&nbsp; <b>measure_take_tail_no_wait_overhead</b> returns to</td></tr>
+<tr><td class="rn">15</td><td class="c"><span class="badge">STOP</span><span class="alias">hsb</span> <span class="addr">300011a8</span>  ldr r2, [r4, #4]</td><td class="c"><span class="badge">STOP</span><span class="alias">probe</span> <span class="addr">300016d4</span>  ldr.w r2, [r9, #4]</td></tr>
+<tr><td class="rn">16</td><td class="c"><span class="alias">hsb</span> <span class="addr">300011aa</span>  ldr r3, [pc, #40]</td><td class="c"><span class="alias">probe</span> <span class="addr">300016d8</span>  ldr r3, [pc, #44]</td></tr>
+<tr><td class="rn">17</td><td class="c"><span class="alias">hsb</span> <span class="addr">300011ac</span>  str r2, [r3, #0]</td><td class="c"><span class="alias">probe</span> <span class="addr">300016da</span>  str r2, [r3, #0]</td></tr>
+</tbody></table></div>
+
+<div class="prov"><h3>Build configuration</h3><dl>
+<dt>Compiler</dt><dd><code>arm-none-eabi-gcc 14.2.1</code> (Arm GNU Toolchain 14.2.Rel1), <code>ZEPHYR_TOOLCHAIN_VARIANT=gnuarmemb</code></dd>
+<dt>Optimisation</dt><dd><code>-Og</code> (<code>CONFIG_DEBUG_OPTIMIZATIONS=y</code>), <code>-mcpu=cortex-m33 -mthumb -mabi=aapcs</code>, <code>-ffunction-sections -fdata-sections</code></dd>
+<dt>Linker script</dt><dd>generated <code>zephyr/linker.cmd</code> for <code>frdm_mcxn947/mcxn947/cpu0</code>, <code>CONFIG_XIP=n</code>: text runs from RAM</dd>
+<dt>Kernel config</dt><dd><code>CONFIG_USE_SWITCH=n</code>, <code>CONFIG_TRACING=n</code>, <code>CONFIG_ASSERT=n</code>, <code>CONFIG_TIMESLICING=n</code>, <code>CONFIG_EVENTS=y</code>, <code>CONFIG_TICKLESS_KERNEL=n</code>, <code>CONFIG_THREAD_CUSTOM_DATA=n</code></dd>
+<dt>Test</dt><dd><code>CONFIG_BENCHMARK_TEST_TASK_SWITCHING_SEM_BLOCK=y</code>, <code>TEST_CASE_II</code></dd>
+<dt>Frame aliases</dt><dd><code>probe</code>: <code>measure_sem_z_swap_overhead</code> or <code>measure_take_tail_no_wait_overhead</code>; <code>pend</code>: <code>z_pend_curr</code>; <code>swap</code>: <code>z_swap_irqlock</code> or <code>sim_z_swap_irqlock_prologue</code> (the copy at 300014a4, the call target of 30001604); <code>take</code>: <code>z_impl_k_sem_take</code> or <code>sim_z_impl_k_sem_take_tail</code>; <code>hsb</code>: <code>H_Task_SB</code>; <code>resched</code>: <code>reschedule</code> or <code>sim_reschedule_swap_tail</code>; <code>z_resched</code>: <code>z_reschedule</code> or <code>sim_z_reschedule_swap_tail</code>; <code>give</code>: <code>z_impl_k_sem_give</code> or <code>sim_z_impl_k_sem_give_tail</code>; <code>lsa</code>: <code>L_Task_SA</code>; in the give tail <code>swap</code> is <code>sim_z_swap_irqlock_tail</code> (the copy at 300014dc) and <code>probe</code> is <code>measure_give_tail_overhead</code></dd>
+<dt>Extraction</dt><dd><code>arm-none-eabi-objdump -d --no-show-raw-insn</code> on the linked ELF. Rows are named by address and the text is read back from that output; objdump comments and literal pools are not shown.</dd>
+<dt>Path</dt><dd><b>From the binary:</b> instructions, addresses, branch targets, the arms that exist. <b>Assumed:</b> the <code>beq.n</code> at +2c of both takes is taken (<code>test_sem</code> and <code>tail_sem</code> hold a zero count, timeout <code>K_NO_WAIT</code>); the swap chain is entered from <code>z_pend_curr</code> on the blocking take; in the give tail, <code>reschedule</code> takes its swap arm (<code>H_Task_SA</code> is ready and outranks <code>L_Task_SA</code>) and <code>L_Task_SA</code> resumes at the <code>isb</code> after the <code>msr BASEPRI</code> where it left the CPU. <b>Not measured:</b> this page is a reconstruction from the listing, not a recording on hardware.</dd>
+<dt>Cost</dt><dd>Instruction counts only. Arm publishes no per-instruction cycle table for Armv8-M, so cost has to be measured differentially on the target.</dd>
+</dl></div>
+</main>
+</body></html>

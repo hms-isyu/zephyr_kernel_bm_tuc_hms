@@ -63,6 +63,11 @@ void measure_wait_overhead(BMTH_measurement_series_t *mseries,
 void measure_wait_tail_no_wait_overhead(BMTH_measurement_series_t *mseries,
                                         uint32_t loop_count);
 
+/*! Tail of k_event_post() with a switch: from the PendSV return in
+ *  z_swap_irqlock() up to the return of k_event_post(). */
+void measure_post_tail_overhead(BMTH_measurement_series_t *mseries,
+                                uint32_t                   loop_count);
+
 #endif /* SIM_MEASURE_H_ */
 
 /*! @} */

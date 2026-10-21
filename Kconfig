@@ -35,6 +35,11 @@ config BENCHMARK_TEST_TASK_SWITCHING_SEM_PREEMPT
     help
       src/task_switching/sem_preempt/time_task_switch_sem.c
 
+config BENCHMARK_TEST_TASK_SWITCHING_SEM_BLOCK
+    bool "Task switch via k_sem, blocking waiter"
+    help
+      src/task_switching/sem_block/time_task_switch_sem.c
+
 config BENCHMARK_TEST_IRT
     bool "Interrupt latency via a self-induced interrupt"
     help

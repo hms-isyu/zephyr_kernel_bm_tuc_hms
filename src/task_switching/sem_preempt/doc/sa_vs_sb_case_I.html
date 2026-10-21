@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sem_preempt: S_A vs S_B, case I</title>
+<style>
+:root{
+  --bg:#ffffff; --fg:#1b1f24; --muted:#6a737d; --line:#d8dee4; --head:#f2f4f7;
+  --code:#24292f; --alias:#8250df; --addr:#57606a;
+  --win:#fff6d5; --mark:#c25e00; --markbg:#fff1e3;
+  --isr:#0a5ca8; --isrbg:#e4f0fb;
+  --match:#0a7f6b; --matchtint:rgba(10,127,107,.12);
+  --ok:#1a7f37; --eq:#8a6d00; --df:#8250df; --fold:#f6f8fa;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; --head:#161b22;
+  --code:#e6edf3; --alias:#d2a8ff; --addr:#8b949e;
+  --win:#3a3213; --mark:#ff9d4d; --markbg:#3d2410;
+  --isr:#79c0ff; --isrbg:#12283f;
+  --match:#39d3b4; --matchtint:rgba(57,211,180,.15);
+  --ok:#3fb950; --eq:#d9b400; --df:#d2a8ff; --fold:#161b22;}}
+:root[data-theme="dark"]{
+  --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; --head:#161b22;
+  --code:#e6edf3; --alias:#d2a8ff; --addr:#8b949e;
+  --win:#3a3213; --mark:#ff9d4d; --markbg:#3d2410;
+  --isr:#79c0ff; --isrbg:#12283f;
+  --match:#39d3b4; --matchtint:rgba(57,211,180,.15);
+  --ok:#3fb950; --eq:#d9b400; --df:#d2a8ff; --fold:#161b22;}
+body{background:var(--bg);color:var(--fg);margin:0;padding:2rem 1.25rem 4rem;
+  font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;}
+main{max-width:1220px;margin:0 auto;}
+h1{font-size:1.4rem;margin:0 0 .3rem;letter-spacing:-.01em;}
+h2{font-size:1.05rem;margin:2.6rem 0 .3rem;letter-spacing:-.01em;}
+.lead{color:var(--muted);margin:0 0 1.2rem;font-size:.92rem;}
+.sub{color:var(--muted);margin:0 0 .8rem;font-size:.88rem;}
+.legend{display:flex;flex-wrap:wrap;gap:.5rem 1.1rem;margin:0 0 1.4rem;
+  font-size:.82rem;color:var(--muted);}
+.legend span{display:inline-flex;align-items:center;gap:.4rem;}
+.sw{width:.85rem;height:.85rem;border-radius:3px;border:1px solid var(--line);
+  display:inline-block;}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:8px;}
+table{border-collapse:collapse;width:100%;font-size:12.5px;}
+th{background:var(--head);text-align:left;padding:.5rem .7rem;font-weight:600;
+  border-bottom:1px solid var(--line);white-space:nowrap;}
+td{padding:.22rem .7rem;border-bottom:1px solid var(--line);vertical-align:top;}
+td.c{font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+  white-space:pre;color:var(--code);}
+td.win{background:var(--win);}
+td.rn{color:var(--addr);text-align:right;padding:.22rem .55rem;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
+  font-size:11px;font-variant-numeric:tabular-nums;
+  user-select:none;white-space:nowrap;}
+th.rn{text-align:right;}
+tr.frame td{background:var(--fold);font-size:11.5px;color:var(--muted);
+  padding:.38rem .7rem;border-top:1px solid var(--line);}
+tr.frame b{color:var(--fg);}
+tr.mark td{background:var(--markbg);}
+tr.mark td.lbl{color:var(--mark);font-weight:700;border-left:3px solid var(--mark);}
+tr.isr td{background:var(--isrbg);}
+tr.matchpath td{background-image:linear-gradient(var(--matchtint),var(--matchtint));}
+tr.matchpath td:first-child{box-shadow:inset 3px 0 0 var(--match);}
+table.desc{border-collapse:collapse;width:100%;font-size:12px;margin:.2rem 0 1.2rem;}
+table.desc caption{caption-side:top;text-align:left;font-size:.8rem;
+  font-weight:600;color:var(--fg);padding:0 0 .35rem;letter-spacing:.01em;}
+table.desc thead th{background:var(--head);font-size:11.5px;padding:.35rem .6rem;
+  border-bottom:1px solid var(--line);vertical-align:bottom;}
+table.desc th.rl{width:15rem;text-align:left;vertical-align:top;
+  background:transparent;font-weight:600;color:var(--fg);white-space:normal;
+  padding:.3rem .6rem;border-bottom:1px solid var(--line);}
+table.desc td{vertical-align:top;color:var(--muted);padding:.3rem .6rem;
+  border-bottom:1px solid var(--line);}
+table.desc td.full{color:var(--muted);}
+tr.isr td.lbl{color:var(--isr);font-weight:700;border-left:3px solid var(--isr);}
+.cmt{color:var(--muted);font-style:italic;}
+.modelled{border-left:3px solid var(--df);}
+.mkey{display:inline-block;width:.85rem;height:.85rem;border-left:3px solid var(--df);
+  background:var(--fold);border-radius:2px;}
+.badge{display:inline-block;border:1.5px solid var(--mark);color:var(--mark);
+  border-radius:3px;padding:0 .35rem;margin-right:.5rem;font-size:10px;
+  font-weight:800;letter-spacing:.06em;vertical-align:1px;}
+.badge.isr{border-color:var(--isr);color:var(--isr);}
+.alias{color:var(--alias);}
+.addr{color:var(--addr);}
+.st{font-size:11px;font-weight:600;white-space:nowrap;}
+.st.identical{color:var(--ok);}
+.st.equivalent{color:var(--eq);}
+.st.differs{color:var(--df);}
+.meta{margin:.7rem 0 0;font-size:.8rem;color:var(--muted);}
+.meta dt{font-weight:600;color:var(--fg);margin-top:.45rem;}
+.meta dd{margin:.1rem 0 0 0;}
+.prov{margin-top:2.8rem;font-size:.82rem;color:var(--muted);
+  border-top:1px solid var(--line);padding-top:.9rem;}
+.prov h3{font-size:.9rem;color:var(--fg);margin:0 0 .5rem;}
+.prov dt{font-weight:600;color:var(--fg);margin-top:.5rem;}
+.prov dd{margin:.1rem 0 0 0;}
+code{font-family:ui-monospace,Consolas,monospace;font-size:.9em;}
+
+:root{--scan:#e8f1ff;--term:#eef8ee;}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--scan:#1b2a40;--term:#18301c;}}
+:root[data-theme="dark"]{--scan:#1b2a40;--term:#18301c;}
+td.scan{box-shadow:inset 4px 0 0 #4a7fd0;background-image:linear-gradient(var(--scan),var(--scan));}
+td.term{box-shadow:inset 4px 0 0 #4f9a5a;background-image:linear-gradient(var(--term),var(--term));}
+</style>
+</head><body>
+<main>
+<h1>sem_preempt: S_A vs S_B, TEST_CASE_I</h1>
+<p class="lead">The measured window of both scenarios in execution order, <code>TEST_CASE_I</code>, no dummy threads, <code>CONFIG_SCHED_SIMPLE</code>. Walked through the linked listing with the branch outcomes stated below: a reconstruction, not a recording. The PendSV handler between the two <code>S_A</code> boundary rows is not listed.</p>
+<div class="legend">
+  <span><i class="sw" style="background:var(--win)"></i>measurement window</span>
+  <span><span class="badge">START</span><span class="badge">STOP</span>counter capture</span>
+  <span><span class="badge isr">PendSV</span>the thread leaves and regains the CPU here</span>
+  <span><i class="sw" style="background:var(--scan)"></i>scan pass: steps over one run-queue entry</span>
+  <span><i class="sw" style="background:var(--term)"></i>terminal pass and insert</span>
+  <span><i class="sw" style="background:var(--fold)"></i>frame divider</span>
+</div>
+<table class="desc"><caption>Test case and preconditions</caption>
+<thead><tr><th></th><th>S_A</th><th>S_B</th></tr></thead><tbody>
+<tr><th class="rl">Giving thread</th><td><code>L_Task_SA(7)</code></td><td><code>H_Task_SB(8)</code></td></tr>
+<tr><th class="rl">Waiter woken by the give</th><td><code>H_Task_SA(2)</code></td><td><code>L_Task_SB(10)</code></td></tr>
+<tr><th class="rl">Run queue before the give</th><td><code>[L_Task_SA(7), idle(15)]</code></td><td><code>[H_Task_SB(8), idle(15)]</code></td></tr>
+<tr><th class="rl">Switch</th><td>yes, <code>reschedule()</code> takes its swap arm</td><td>no, the ready-queue cache stays on <code>H_Task_SB</code></td></tr>
+<tr><th class="rl">Scan passes in the run-queue insert</th><td>0</td><td>1</td></tr>
+<tr><th class="rl">Instructions in the run-queue insert</th><td>14 (terminal pass 8 + insert 6)</td><td>31 (scan 17 + terminal pass 8 + insert 6)</td></tr>
+<tr><th class="rl">Instructions between START and STOP</th><td>156, PendSV handler not counted</td><td>157</td></tr>
+<tr><th class="rl">S_B &minus; S_A</th><td colspan="2">+1 scan pass, +17 instructions in the run-queue insert, +1 over the whole window</td></tr>
+<tr><th class="rl">Configuration</th><td colspan="2"><code>TASK_SA_LOW_PRIO = 7, TASK_SA_HIGH_PRIO = 2, TASK_SB_HIGH_PRIO = 8, TASK_SB_LOW_PRIO = 10, TEST_SB_HAS_WAITER = 1, ADD_DUMMY_TASKS = 0</code></td></tr>
+</tbody></table>
+<table class="desc"><caption>Run-queue asymmetry</caption><tbody>
+<tr><th class="rl">Where</th><td class="full" colspan="2"><code>z_priq_simple_add()</code> (<code>kernel/include/priority_q.h</code>), inlined into <code>ready_thread()</code> under <code>z_ready_thread()</code>, called by the waiter arm of <code>z_impl_k_sem_give()</code> in both scenarios, before <code>reschedule()</code>. The loop walks the run queue until it finds a thread of lower priority than the one inserted.</td></tr>
+<tr><th class="rl">S_A</th><td class="full" colspan="2"><code>H_Task_SA(2)</code> outranks the running <code>L_Task_SA(7)</code> at the head: one compare, insert at the head. 0 scan passes.</td></tr>
+<tr><th class="rl">S_B</th><td class="full" colspan="2"><code>L_Task_SB(10)</code> ranks below the running <code>H_Task_SB(8)</code>: the walk passes it and inserts before idle. 1 scan pass of 17 instructions (shaded rows).</td></tr>
+<tr><th class="rl">Consequence</th><td class="full" colspan="2">The stretch before <code>reschedule()</code> is not the same in the two windows. <code>S_B</code> carries 17 more instructions there, which no simulated tail removes, so <code>S_A - (S_B - T_give)</code> comes out short by the cost of that scan pass. The design cannot avoid it under <code>CONFIG_SCHED_SIMPLE</code>: the woken thread in <code>S_A</code> outranks the giver and goes to the head; the woken thread in <code>S_B</code> ranks below the giver and passes it.</td></tr>
+</tbody></table>
+<div class="scroll"><table>
+<thead><tr><th class="rn">#</th><th>S_A: <code>L_Task_SA(7)</code> gives, <code>H_Task_SA(2)</code> stops the counter</th><th>S_B: <code>H_Task_SB(8)</code> gives and stops its own counter</th></tr></thead>
+<tbody>
+<tr class="frame"><td colspan="3"><b>L_Task_SA</b> &nbsp;|&nbsp; <b>H_Task_SB</b></td></tr>
+<tr><td class="rn">1</td><td class="c"><span class="alias">L_Task_SA</span> <span class="addr">300011b4</span>  ldr r3, [pc, #40]</td><td class="c"><span class="alias">H_Task_SB</span> <span class="addr">3000114a</span>  ldr r4, [pc, #56]</td></tr>
+<tr><td class="rn">2</td><td class="c"><span class="alias">L_Task_SA</span> <span class="addr">300011b6</span>  movs r2, #0</td><td class="c"><span class="alias">H_Task_SB</span> <span class="addr">3000114c</span>  movs r3, #0</td></tr>
+<tr><td class="rn">3</td><td class="c"><span class="alias">L_Task_SA</span> <span class="addr">300011b8</span>  str r2, [r3, #4]</td><td class="c"><span class="alias">H_Task_SB</span> <span class="addr">3000114e</span>  str r3, [r4, #4]</td></tr>
+<tr><td class="rn">4</td><td class="c"><span class="alias">L_Task_SA</span> <span class="addr">300011ba</span>  dsb sy</td><td class="c"><span class="alias">H_Task_SB</span> <span class="addr">30001150</span>  dsb sy</td></tr>
+<tr><td class="rn">5</td><td class="c"><span class="alias">L_Task_SA</span> <span class="addr">300011be</span>  isb sy</td><td class="c"><span class="alias">H_Task_SB</span> <span class="addr">30001154</span>  isb sy</td></tr>
+<tr><td class="rn">6</td><td class="c"><span class="badge">START</span><span class="alias">L_Task_SA</span> <span class="addr">300011c2</span>  ldr r2, [r3, #4]</td><td class="c"><span class="badge">START</span><span class="alias">H_Task_SB</span> <span class="addr">30001158</span>  ldr r3, [r4, #4]</td></tr>
+<tr><td class="rn">7</td><td class="c win"><span class="alias">L_Task_SA</span> <span class="addr">300011c4</span>  ldr r3, [pc, #28]</td><td class="c win"><span class="alias">H_Task_SB</span> <span class="addr">3000115a</span>  ldr r6, [pc, #44]</td></tr>
+<tr><td class="rn">8</td><td class="c win"><span class="alias">L_Task_SA</span> <span class="addr">300011c6</span>  str r2, [r3, #0]</td><td class="c win"><span class="alias">H_Task_SB</span> <span class="addr">3000115c</span>  str r3, [r6, #0]</td></tr>
+<tr><td class="rn">9</td><td class="c win"><span class="alias">L_Task_SA</span> <span class="addr">300011c8</span>  ldr r0, [pc, #28]</td><td class="c win"><span class="alias">H_Task_SB</span> <span class="addr">3000115e</span>  ldr r0, [pc, #44]</td></tr>
+<tr><td class="rn">10</td><td class="c win"><span class="alias">L_Task_SA</span> <span class="addr">300011ca</span>  bl 300039d8 &lt;z_impl_k_sem_give&gt;</td><td class="c win"><span class="alias">H_Task_SB</span> <span class="addr">30001160</span>  bl 300039d8 &lt;z_impl_k_sem_give&gt;</td></tr>
+<tr class="frame"><td colspan="3"><b>z_impl_k_sem_give</b> &nbsp;|&nbsp; <b>z_impl_k_sem_give</b></td></tr>
+<tr><td class="rn">11</td><td class="c win"><span class="alias">give</span> <span class="addr">300039d8</span>  push {r4, r5, r6, lr}</td><td class="c win"><span class="alias">give</span> <span class="addr">300039d8</span>  push {r4, r5, r6, lr}</td></tr>
+<tr><td class="rn">12</td><td class="c win"><span class="alias">give</span> <span class="addr">300039da</span>  mrs r6, BASEPRI</td><td class="c win"><span class="alias">give</span> <span class="addr">300039da</span>  mrs r6, BASEPRI</td></tr>
+<tr><td class="rn">13</td><td class="c win"><span class="alias">give</span> <span class="addr">300039de</span>  movs r3, #32</td><td class="c win"><span class="alias">give</span> <span class="addr">300039de</span>  movs r3, #32</td></tr>
+<tr><td class="rn">14</td><td class="c win"><span class="alias">give</span> <span class="addr">300039e0</span>  msr BASEPRI_MAX, r3</td><td class="c win"><span class="alias">give</span> <span class="addr">300039e0</span>  msr BASEPRI_MAX, r3</td></tr>
+<tr><td class="rn">15</td><td class="c win"><span class="alias">give</span> <span class="addr">300039e4</span>  isb sy</td><td class="c win"><span class="alias">give</span> <span class="addr">300039e4</span>  isb sy</td></tr>
+<tr><td class="rn">16</td><td class="c win"><span class="alias">give</span> <span class="addr">300039e8</span>  ldr r4, [r0, #0]</td><td class="c win"><span class="alias">give</span> <span class="addr">300039e8</span>  ldr r4, [r0, #0]</td></tr>
+<tr><td class="rn">17</td><td class="c win"><span class="alias">give</span> <span class="addr">300039ea</span>  cmp r0, r4</td><td class="c win"><span class="alias">give</span> <span class="addr">300039ea</span>  cmp r0, r4</td></tr>
+<tr><td class="rn">18</td><td class="c win"><span class="alias">give</span> <span class="addr">300039ec</span>  beq.n 30003a22 &lt;z_impl_k_sem_give+0x4a&gt;</td><td class="c win"><span class="alias">give</span> <span class="addr">300039ec</span>  beq.n 30003a22 &lt;z_impl_k_sem_give+0x4a&gt;</td></tr>
+<tr><td class="rn">19</td><td class="c win"><span class="alias">give</span> <span class="addr">300039ee</span>  cbz r4, 30003a22 &lt;z_impl_k_sem_give+0x4a&gt;</td><td class="c win"><span class="alias">give</span> <span class="addr">300039ee</span>  cbz r4, 30003a22 &lt;z_impl_k_sem_give+0x4a&gt;</td></tr>
+<tr><td class="rn">20</td><td class="c win"><span class="alias">give</span> <span class="addr">300039f0</span>  ldr r2, [r4, #4]</td><td class="c win"><span class="alias">give</span> <span class="addr">300039f0</span>  ldr r2, [r4, #4]</td></tr>
+<tr><td class="rn">21</td><td class="c win"><span class="alias">give</span> <span class="addr">300039f2</span>  ldr r3, [r4, #0]</td><td class="c win"><span class="alias">give</span> <span class="addr">300039f2</span>  ldr r3, [r4, #0]</td></tr>
+<tr><td class="rn">22</td><td class="c win"><span class="alias">give</span> <span class="addr">300039f4</span>  str r3, [r2, #0]</td><td class="c win"><span class="alias">give</span> <span class="addr">300039f4</span>  str r3, [r2, #0]</td></tr>
+<tr><td class="rn">23</td><td class="c win"><span class="alias">give</span> <span class="addr">300039f6</span>  str r2, [r3, #4]</td><td class="c win"><span class="alias">give</span> <span class="addr">300039f6</span>  str r2, [r3, #4]</td></tr>
+<tr><td class="rn">24</td><td class="c win"><span class="alias">give</span> <span class="addr">300039f8</span>  movs r5, #0</td><td class="c win"><span class="alias">give</span> <span class="addr">300039f8</span>  movs r5, #0</td></tr>
+<tr><td class="rn">25</td><td class="c win"><span class="alias">give</span> <span class="addr">300039fa</span>  str r5, [r4, #0]</td><td class="c win"><span class="alias">give</span> <span class="addr">300039fa</span>  str r5, [r4, #0]</td></tr>
+<tr><td class="rn">26</td><td class="c win"><span class="alias">give</span> <span class="addr">300039fc</span>  str r5, [r4, #4]</td><td class="c win"><span class="alias">give</span> <span class="addr">300039fc</span>  str r5, [r4, #4]</td></tr>
+<tr><td class="rn">27</td><td class="c win"><span class="alias">give</span> <span class="addr">300039fe</span>  ldrb r3, [r4, #16]</td><td class="c win"><span class="alias">give</span> <span class="addr">300039fe</span>  ldrb r3, [r4, #16]</td></tr>
+<tr><td class="rn">28</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a00</span>  bic.w r3, r3, #2</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a00</span>  bic.w r3, r3, #2</td></tr>
+<tr><td class="rn">29</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a04</span>  strb r3, [r4, #16]</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a04</span>  strb r3, [r4, #16]</td></tr>
+<tr><td class="rn">30</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a06</span>  str r5, [r4, #8]</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a06</span>  str r5, [r4, #8]</td></tr>
+<tr><td class="rn">31</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a08</span>  add.w r0, r4, #24</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a08</span>  add.w r0, r4, #24</td></tr>
+<tr><td class="rn">32</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a0c</span>  bl 30005b66 &lt;z_abort_timeout&gt;</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a0c</span>  bl 30005b66 &lt;z_abort_timeout&gt;</td></tr>
+<tr class="frame"><td colspan="3"><b>z_abort_timeout</b> &nbsp;|&nbsp; <b>z_abort_timeout</b></td></tr>
+<tr><td class="rn">33</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b66</span>  stmdb sp!, {r4, r5, r6, r7, r8, lr}</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b66</span>  stmdb sp!, {r4, r5, r6, r7, r8, lr}</td></tr>
+<tr><td class="rn">34</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b6a</span>  mov r4, r0</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b6a</span>  mov r4, r0</td></tr>
+<tr><td class="rn">35</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b6c</span>  movs r5, #0</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b6c</span>  movs r5, #0</td></tr>
+<tr><td class="rn">36</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b6e</span>  mrs r7, BASEPRI</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b6e</span>  mrs r7, BASEPRI</td></tr>
+<tr><td class="rn">37</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b72</span>  movs r3, #32</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b72</span>  movs r3, #32</td></tr>
+<tr><td class="rn">38</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b74</span>  msr BASEPRI_MAX, r3</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b74</span>  msr BASEPRI_MAX, r3</td></tr>
+<tr><td class="rn">39</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b78</span>  isb sy</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b78</span>  isb sy</td></tr>
+<tr><td class="rn">40</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b7c</span>  mvn.w r0, #21</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b7c</span>  mvn.w r0, #21</td></tr>
+<tr><td class="rn">41</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b80</span>  b.n 30005bac &lt;z_abort_timeout+0x46&gt;</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b80</span>  b.n 30005bac &lt;z_abort_timeout+0x46&gt;</td></tr>
+<tr><td class="rn">42</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005bac</span>  mov r8, r5</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005bac</span>  mov r8, r5</td></tr>
+<tr><td class="rn">43</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005bae</span>  cbnz r5, 30005be0 &lt;z_abort_timeout+0x7a&gt;</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005bae</span>  cbnz r5, 30005be0 &lt;z_abort_timeout+0x7a&gt;</td></tr>
+<tr><td class="rn">44</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005bb0</span>  ldr r3, [r4, #0]</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005bb0</span>  ldr r3, [r4, #0]</td></tr>
+<tr><td class="rn">45</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005bb2</span>  cmp r3, #0</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005bb2</span>  cmp r3, #0</td></tr>
+<tr><td class="rn">46</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005bb4</span>  beq.n 30005b94 &lt;z_abort_timeout+0x2e&gt;</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005bb4</span>  beq.n 30005b94 &lt;z_abort_timeout+0x2e&gt;</td></tr>
+<tr><td class="rn">47</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b94</span>  ldr r2, [r4, #16]</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b94</span>  ldr r2, [r4, #16]</td></tr>
+<tr><td class="rn">48</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b96</span>  ldr r3, [r4, #20]</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b96</span>  ldr r3, [r4, #20]</td></tr>
+<tr><td class="rn">49</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b98</span>  cmp.w r3, #2147483648</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b98</span>  cmp.w r3, #2147483648</td></tr>
+<tr><td class="rn">50</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b9c</span>  it eq</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b9c</span>  it eq</td></tr>
+<tr><td class="rn">51</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b9e</span>  cmpeq r2, #1</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005b9e</span>  cmpeq r2, #1</td></tr>
+<tr><td class="rn">52</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005ba0</span>  beq.n 30005bd4 &lt;z_abort_timeout+0x6e&gt;</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005ba0</span>  beq.n 30005bd4 &lt;z_abort_timeout+0x6e&gt;</td></tr>
+<tr><td class="rn">53</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005ba2</span>  msr BASEPRI, r7</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005ba2</span>  msr BASEPRI, r7</td></tr>
+<tr><td class="rn">54</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005ba6</span>  isb sy</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005ba6</span>  isb sy</td></tr>
+<tr><td class="rn">55</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005baa</span>  movs r5, #1</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005baa</span>  movs r5, #1</td></tr>
+<tr><td class="rn">56</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005bac</span>  mov r8, r5</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005bac</span>  mov r8, r5</td></tr>
+<tr><td class="rn">57</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005bae</span>  cbnz r5, 30005be0 &lt;z_abort_timeout+0x7a&gt;</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005bae</span>  cbnz r5, 30005be0 &lt;z_abort_timeout+0x7a&gt;</td></tr>
+<tr><td class="rn">58</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005be0</span>  ldmia.w sp!, {r4, r5, r6, r7, r8, pc}</td><td class="c win"><span class="alias">abort</span> <span class="addr">30005be0</span>  ldmia.w sp!, {r4, r5, r6, r7, r8, pc}</td></tr>
+<tr class="frame"><td colspan="3"><b>z_impl_k_sem_give</b> &nbsp;|&nbsp; <b>z_impl_k_sem_give</b></td></tr>
+<tr><td class="rn">59</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a10</span>  str r5, [r4, #116]</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a10</span>  str r5, [r4, #116]</td></tr>
+<tr><td class="rn">60</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a12</span>  mov r0, r4</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a12</span>  mov r0, r4</td></tr>
+<tr><td class="rn">61</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a14</span>  bl 300059b8 &lt;z_ready_thread&gt;</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a14</span>  bl 300059b8 &lt;z_ready_thread&gt;</td></tr>
+<tr class="frame"><td colspan="3"><b>z_ready_thread</b> &nbsp;|&nbsp; <b>z_ready_thread</b></td></tr>
+<tr><td class="rn">62</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059b8</span>  push {r3, r4, r5, lr}</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059b8</span>  push {r3, r4, r5, lr}</td></tr>
+<tr><td class="rn">63</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059ba</span>  mov r4, r0</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059ba</span>  mov r4, r0</td></tr>
+<tr><td class="rn">64</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059bc</span>  movs r3, #0</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059bc</span>  movs r3, #0</td></tr>
+<tr><td class="rn">65</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059be</span>  mrs r5, BASEPRI</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059be</span>  mrs r5, BASEPRI</td></tr>
+<tr><td class="rn">66</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059c2</span>  movs r2, #32</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059c2</span>  movs r2, #32</td></tr>
+<tr><td class="rn">67</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059c4</span>  msr BASEPRI_MAX, r2</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059c4</span>  msr BASEPRI_MAX, r2</td></tr>
+<tr><td class="rn">68</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059c8</span>  isb sy</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059c8</span>  isb sy</td></tr>
+<tr><td class="rn">69</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059cc</span>  b.n 300059d8 &lt;z_ready_thread+0x20&gt;</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059cc</span>  b.n 300059d8 &lt;z_ready_thread+0x20&gt;</td></tr>
+<tr><td class="rn">70</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059d8</span>  cbnz r3, 300059ec &lt;z_ready_thread+0x34&gt;</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059d8</span>  cbnz r3, 300059ec &lt;z_ready_thread+0x34&gt;</td></tr>
+<tr><td class="rn">71</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059da</span>  mov r0, r4</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059da</span>  mov r0, r4</td></tr>
+<tr><td class="rn">72</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059dc</span>  bl 300058f8 &lt;thread_active_elsewhere&gt;</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059dc</span>  bl 300058f8 &lt;thread_active_elsewhere&gt;</td></tr>
+<tr class="frame"><td colspan="3"><b>thread_active_elsewhere</b> &nbsp;|&nbsp; <b>thread_active_elsewhere</b></td></tr>
+<tr><td class="rn">73</td><td class="c win"><span class="alias">elsewhere</span> <span class="addr">300058f8</span>  movs r0, #0</td><td class="c win"><span class="alias">elsewhere</span> <span class="addr">300058f8</span>  movs r0, #0</td></tr>
+<tr><td class="rn">74</td><td class="c win"><span class="alias">elsewhere</span> <span class="addr">300058fa</span>  bx lr</td><td class="c win"><span class="alias">elsewhere</span> <span class="addr">300058fa</span>  bx lr</td></tr>
+<tr class="frame"><td colspan="3"><b>z_ready_thread</b> &nbsp;|&nbsp; <b>z_ready_thread</b></td></tr>
+<tr><td class="rn">75</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059e0</span>  cmp r0, #0</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059e0</span>  cmp r0, #0</td></tr>
+<tr><td class="rn">76</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059e2</span>  bne.n 300059ce &lt;z_ready_thread+0x16&gt;</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059e2</span>  bne.n 300059ce &lt;z_ready_thread+0x16&gt;</td></tr>
+<tr><td class="rn">77</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059e4</span>  mov r0, r4</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059e4</span>  mov r0, r4</td></tr>
+<tr><td class="rn">78</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059e6</span>  bl 30003bc8 &lt;ready_thread&gt;</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059e6</span>  bl 30003bc8 &lt;ready_thread&gt;</td></tr>
+<tr class="frame"><td colspan="3"><b>ready_thread</b> &nbsp;|&nbsp; <b>ready_thread</b></td></tr>
+<tr><td class="rn">79</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003bc8</span>  ldrb r3, [r0, #16]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003bc8</span>  ldrb r3, [r0, #16]</td></tr>
+<tr><td class="rn">80</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003bca</span>  ldrsb.w r2, [r0, #16]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003bca</span>  ldrsb.w r2, [r0, #16]</td></tr>
+<tr><td class="rn">81</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003bce</span>  cmp r2, #0</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003bce</span>  cmp r2, #0</td></tr>
+<tr><td class="rn">82</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003bd0</span>  blt.n 30003c40 &lt;ready_thread+0x78&gt;</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003bd0</span>  blt.n 30003c40 &lt;ready_thread+0x78&gt;</td></tr>
+<tr><td class="rn">83</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003bd2</span>  tst.w r3, #31</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003bd2</span>  tst.w r3, #31</td></tr>
+<tr><td class="rn">84</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003bd6</span>  bne.n 30003c40 &lt;ready_thread+0x78&gt;</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003bd6</span>  bne.n 30003c40 &lt;ready_thread+0x78&gt;</td></tr>
+<tr><td class="rn">85</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003bd8</span>  orn r3, r3, #127</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003bd8</span>  orn r3, r3, #127</td></tr>
+<tr><td class="rn">86</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003bdc</span>  strb r3, [r0, #16]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003bdc</span>  strb r3, [r0, #16]</td></tr>
+<tr><td class="rn">87</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003bde</span>  ldr r2, [pc, #132]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003bde</span>  ldr r2, [pc, #132]</td></tr>
+<tr><td class="rn">88</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003be0</span>  ldr.w r3, [r2, #24]!</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003be0</span>  ldr.w r3, [r2, #24]!</td></tr>
+<tr><td class="rn">89</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003be4</span>  cmp r3, r2</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003be4</span>  cmp r3, r2</td></tr>
+<tr><td class="rn">90</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003be6</span>  beq.n 30003c54 &lt;ready_thread+0x8c&gt;</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003be6</span>  beq.n 30003c54 &lt;ready_thread+0x8c&gt;</td></tr>
+<tr><td class="rn">91</td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003be8</span>  cbz r3, 30003c0a &lt;ready_thread+0x42&gt;</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003be8</span>  cbz r3, 30003c0a &lt;ready_thread+0x42&gt;</td></tr>
+<tr><td class="rn">92</td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003bea</span>  ldrsb.w r1, [r0, #14]</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003bea</span>  ldrsb.w r1, [r0, #14]</td></tr>
+<tr><td class="rn">93</td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003bee</span>  ldrsb.w r2, [r3, #14]</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003bee</span>  ldrsb.w r2, [r3, #14]</td></tr>
+<tr><td class="rn">94</td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003bf2</span>  cmp r1, r2</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003bf2</span>  cmp r1, r2</td></tr>
+<tr><td class="rn">95</td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003bf4</span>  beq.n 30003bfc &lt;ready_thread+0x34&gt;</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003bf4</span>  beq.n 30003bfc &lt;ready_thread+0x34&gt;</td></tr>
+<tr><td class="rn">96</td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003bf6</span>  subs r2, r2, r1</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003bf6</span>  subs r2, r2, r1</td></tr>
+<tr><td class="rn">97</td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003bf8</span>  cmp r2, #0</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003bf8</span>  cmp r2, #0</td></tr>
+<tr><td class="rn">98</td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003bfa</span>  bgt.n 30003c42 &lt;ready_thread+0x7a&gt;</td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003bfa</span>  bgt.n 30003c42 &lt;ready_thread+0x7a&gt;</td></tr>
+<tr><td class="rn">99</td><td class="c"></td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003bfc</span>  mov r1, r3</td></tr>
+<tr><td class="rn">100</td><td class="c"></td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003bfe</span>  ldr r2, [pc, #100]</td></tr>
+<tr><td class="rn">101</td><td class="c"></td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003c00</span>  ldr r2, [r2, #28]</td></tr>
+<tr><td class="rn">102</td><td class="c"></td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003c02</span>  cmp r3, r2</td></tr>
+<tr><td class="rn">103</td><td class="c"></td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003c04</span>  beq.n 30003c0a &lt;ready_thread+0x42&gt;</td></tr>
+<tr><td class="rn">104</td><td class="c"></td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003c06</span>  ldr r3, [r3, #0]</td></tr>
+<tr><td class="rn">105</td><td class="c"></td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003c08</span>  cbnz r3, 30003c4e &lt;ready_thread+0x86&gt;</td></tr>
+<tr><td class="rn">106</td><td class="c"></td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003c4e</span>  cmp r1, #0</td></tr>
+<tr><td class="rn">107</td><td class="c"></td><td class="c win scan"><span class="alias">ready</span> <span class="addr">30003c50</span>  bne.n 30003be8 &lt;ready_thread+0x20&gt;</td></tr>
+<tr><td class="rn">108</td><td class="c"></td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003be8</span>  cbz r3, 30003c0a &lt;ready_thread+0x42&gt;</td></tr>
+<tr><td class="rn">109</td><td class="c"></td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003bea</span>  ldrsb.w r1, [r0, #14]</td></tr>
+<tr><td class="rn">110</td><td class="c"></td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003bee</span>  ldrsb.w r2, [r3, #14]</td></tr>
+<tr><td class="rn">111</td><td class="c"></td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003bf2</span>  cmp r1, r2</td></tr>
+<tr><td class="rn">112</td><td class="c"></td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003bf4</span>  beq.n 30003bfc &lt;ready_thread+0x34&gt;</td></tr>
+<tr><td class="rn">113</td><td class="c"></td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003bf6</span>  subs r2, r2, r1</td></tr>
+<tr><td class="rn">114</td><td class="c"></td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003bf8</span>  cmp r2, #0</td></tr>
+<tr><td class="rn">115</td><td class="c"></td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003bfa</span>  bgt.n 30003c42 &lt;ready_thread+0x7a&gt;</td></tr>
+<tr><td class="rn">116</td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003c42</span>  ldr r2, [r3, #4]</td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003c42</span>  ldr r2, [r3, #4]</td></tr>
+<tr><td class="rn">117</td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003c44</span>  str r2, [r0, #4]</td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003c44</span>  str r2, [r0, #4]</td></tr>
+<tr><td class="rn">118</td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003c46</span>  str r3, [r0, #0]</td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003c46</span>  str r3, [r0, #0]</td></tr>
+<tr><td class="rn">119</td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003c48</span>  str r0, [r2, #0]</td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003c48</span>  str r0, [r2, #0]</td></tr>
+<tr><td class="rn">120</td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003c4a</span>  str r0, [r3, #4]</td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003c4a</span>  str r0, [r3, #4]</td></tr>
+<tr><td class="rn">121</td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003c4c</span>  b.n 30003c1a &lt;ready_thread+0x52&gt;</td><td class="c win term"><span class="alias">ready</span> <span class="addr">30003c4c</span>  b.n 30003c1a &lt;ready_thread+0x52&gt;</td></tr>
+<tr><td class="rn">122</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c1a</span>  ldr r2, [pc, #72]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c1a</span>  ldr r2, [pc, #72]</td></tr>
+<tr><td class="rn">123</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c1c</span>  ldr.w r3, [r2, #24]!</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c1c</span>  ldr.w r3, [r2, #24]!</td></tr>
+<tr><td class="rn">124</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c20</span>  cmp r3, r2</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c20</span>  cmp r3, r2</td></tr>
+<tr><td class="rn">125</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c22</span>  beq.n 30003c58 &lt;ready_thread+0x90&gt;</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c22</span>  beq.n 30003c58 &lt;ready_thread+0x90&gt;</td></tr>
+<tr><td class="rn">126</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c24</span>  cbz r3, 30003c58 &lt;ready_thread+0x90&gt;</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c24</span>  cbz r3, 30003c58 &lt;ready_thread+0x90&gt;</td></tr>
+<tr><td class="rn">127</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c26</span>  ldr r2, [pc, #60]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c26</span>  ldr r2, [pc, #60]</td></tr>
+<tr><td class="rn">128</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c28</span>  ldr r2, [r2, #8]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c28</span>  ldr r2, [r2, #8]</td></tr>
+<tr><td class="rn">129</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c2a</span>  ldrb r1, [r2, #16]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c2a</span>  ldrb r1, [r2, #16]</td></tr>
+<tr><td class="rn">130</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c2c</span>  tst.w r1, #31</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c2c</span>  tst.w r1, #31</td></tr>
+<tr><td class="rn">131</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c30</span>  bne.n 30003c3c &lt;ready_thread+0x74&gt;</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c30</span>  bne.n 30003c3c &lt;ready_thread+0x74&gt;</td></tr>
+<tr><td class="rn">132</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c32</span>  ldrh r1, [r2, #14]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c32</span>  ldrh r1, [r2, #14]</td></tr>
+<tr><td class="rn">133</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c34</span>  cmp r1, #127</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c34</span>  cmp r1, #127</td></tr>
+<tr><td class="rn">134</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c36</span>  bls.n 30003c3c &lt;ready_thread+0x74&gt;</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c36</span>  bls.n 30003c3c &lt;ready_thread+0x74&gt;</td></tr>
+<tr><td class="rn">135</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c3c</span>  ldr r2, [pc, #36]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c3c</span>  ldr r2, [pc, #36]</td></tr>
+<tr><td class="rn">136</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c3e</span>  str r3, [r2, #20]</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c3e</span>  str r3, [r2, #20]</td></tr>
+<tr><td class="rn">137</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c40</span>  bx lr</td><td class="c win"><span class="alias">ready</span> <span class="addr">30003c40</span>  bx lr</td></tr>
+<tr class="frame"><td colspan="3"><b>z_ready_thread</b> &nbsp;|&nbsp; <b>z_ready_thread</b></td></tr>
+<tr><td class="rn">138</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059ea</span>  b.n 300059ce &lt;z_ready_thread+0x16&gt;</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059ea</span>  b.n 300059ce &lt;z_ready_thread+0x16&gt;</td></tr>
+<tr><td class="rn">139</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059ce</span>  msr BASEPRI, r5</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059ce</span>  msr BASEPRI, r5</td></tr>
+<tr><td class="rn">140</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059d2</span>  isb sy</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059d2</span>  isb sy</td></tr>
+<tr><td class="rn">141</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059d6</span>  movs r3, #1</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059d6</span>  movs r3, #1</td></tr>
+<tr><td class="rn">142</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059d8</span>  cbnz r3, 300059ec &lt;z_ready_thread+0x34&gt;</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059d8</span>  cbnz r3, 300059ec &lt;z_ready_thread+0x34&gt;</td></tr>
+<tr><td class="rn">143</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059ec</span>  pop {r3, r4, r5, pc}</td><td class="c win"><span class="alias">z_ready</span> <span class="addr">300059ec</span>  pop {r3, r4, r5, pc}</td></tr>
+<tr class="frame"><td colspan="3"><b>z_impl_k_sem_give</b> &nbsp;|&nbsp; <b>z_impl_k_sem_give</b></td></tr>
+<tr><td class="rn">144</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a18</span>  mov r1, r6</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a18</span>  mov r1, r6</td></tr>
+<tr><td class="rn">145</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a1a</span>  ldr r0, [pc, #36]</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a1a</span>  ldr r0, [pc, #36]</td></tr>
+<tr><td class="rn">146</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a1c</span>  bl 30005a50 &lt;z_reschedule&gt;</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a1c</span>  bl 30005a50 &lt;z_reschedule&gt;</td></tr>
+<tr class="frame"><td colspan="3"><b>z_reschedule</b> &nbsp;|&nbsp; <b>z_reschedule</b></td></tr>
+<tr><td class="rn">147</td><td class="c win"><span class="alias">z_resched</span> <span class="addr">30005a50</span>  push {r3, lr}</td><td class="c win"><span class="alias">z_resched</span> <span class="addr">30005a50</span>  push {r3, lr}</td></tr>
+<tr><td class="rn">148</td><td class="c win"><span class="alias">z_resched</span> <span class="addr">30005a52</span>  bl 30003c68 &lt;reschedule&gt;</td><td class="c win"><span class="alias">z_resched</span> <span class="addr">30005a52</span>  bl 30003c68 &lt;reschedule&gt;</td></tr>
+<tr class="frame"><td colspan="3"><b>reschedule</b> &nbsp;|&nbsp; <b>reschedule</b></td></tr>
+<tr><td class="rn">149</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c68</span>  mov r0, r1</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c68</span>  mov r0, r1</td></tr>
+<tr><td class="rn">150</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c6a</span>  cbnz r1, 30003c8e &lt;reschedule+0x26&gt;</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c6a</span>  cbnz r1, 30003c8e &lt;reschedule+0x26&gt;</td></tr>
+<tr><td class="rn">151</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c6c</span>  push {r3, lr}</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c6c</span>  push {r3, lr}</td></tr>
+<tr><td class="rn">152</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c6e</span>  mrs r3, IPSR</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c6e</span>  mrs r3, IPSR</td></tr>
+<tr><td class="rn">153</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c72</span>  cbnz r3, 30003c84 &lt;reschedule+0x1c&gt;</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c72</span>  cbnz r3, 30003c84 &lt;reschedule+0x1c&gt;</td></tr>
+<tr><td class="rn">154</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c74</span>  ldr r3, [pc, #32]</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c74</span>  ldr r3, [pc, #32]</td></tr>
+<tr><td class="rn">155</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c76</span>  ldr r2, [r3, #20]</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c76</span>  ldr r2, [r3, #20]</td></tr>
+<tr><td class="rn">156</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c78</span>  ldr r3, [r3, #8]</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c78</span>  ldr r3, [r3, #8]</td></tr>
+<tr><td class="rn">157</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c7a</span>  cmp r2, r3</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c7a</span>  cmp r2, r3</td></tr>
+<tr><td class="rn">158</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c7c</span>  beq.n 30003c84 &lt;reschedule+0x1c&gt;</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c7c</span>  beq.n 30003c84 &lt;reschedule+0x1c&gt;</td></tr>
+<tr><td class="rn">159</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c7e</span>  bl 30003b98 &lt;z_swap_irqlock&gt;</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c84</span>  msr BASEPRI, r0</td></tr>
+<tr class="frame"><td colspan="3"><b>z_swap_irqlock</b> &nbsp;|&nbsp; reschedule</td></tr>
+<tr><td class="rn">160</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003b98</span>  ldr r2, [pc, #36]</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c88</span>  isb sy</td></tr>
+<tr><td class="rn">161</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003b9a</span>  ldr r3, [r2, #8]</td><td class="c win"><span class="alias">resched</span> <span class="addr">30003c8c</span>  pop {r3, pc}</td></tr>
+<tr class="frame"><td colspan="3">z_swap_irqlock &nbsp;|&nbsp; <b>z_reschedule</b></td></tr>
+<tr><td class="rn">162</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003b9c</span>  str r0, [r3, #112]</td><td class="c win"><span class="alias">z_resched</span> <span class="addr">30005a56</span>  pop {r3, pc}</td></tr>
+<tr class="frame"><td colspan="3">z_swap_irqlock &nbsp;|&nbsp; <b>z_impl_k_sem_give</b></td></tr>
+<tr><td class="rn">163</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003b9e</span>  mvn.w r1, #10</td><td class="c win"><span class="alias">give</span> <span class="addr">30003a20</span>  pop {r4, r5, r6, pc}</td></tr>
+<tr><td class="rn">164</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003ba2</span>  str r1, [r3, #116]</td><td class="c"></td></tr>
+<tr><td class="rn">165</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003ba4</span>  ldr r1, [pc, #28]</td><td class="c"></td></tr>
+<tr><td class="rn">166</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003ba6</span>  ldr r3, [r1, #4]</td><td class="c"></td></tr>
+<tr><td class="rn">167</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003ba8</span>  orr.w r3, r3, #268435456</td><td class="c"></td></tr>
+<tr><td class="rn">168</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003bac</span>  str r3, [r1, #4]</td><td class="c"></td></tr>
+<tr><td class="rn">169</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003bae</span>  movs r3, #0</td><td class="c"></td></tr>
+<tr><td class="rn">170</td><td class="c win"><span class="badge isr">PendSV FIRES</span><span class="alias">swap</span> <span class="addr">30003bb0</span>  msr BASEPRI, r3</td><td class="c"></td></tr>
+<tr><td class="rn">171</td><td class="c win"><span class="badge isr">PendSV RETURN</span><span class="alias">swap</span> <span class="addr">30003bb4</span>  isb sy</td><td class="c"></td></tr>
+<tr><td class="rn">172</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003bb8</span>  ldr r3, [r2, #8]</td><td class="c"></td></tr>
+<tr><td class="rn">173</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003bba</span>  ldr r0, [r3, #116]</td><td class="c"></td></tr>
+<tr><td class="rn">174</td><td class="c win"><span class="alias">swap</span> <span class="addr">30003bbc</span>  bx lr</td><td class="c"></td></tr>
+<tr class="frame"><td colspan="3"><b>z_pend_curr</b> &nbsp;|&nbsp; z_impl_k_sem_give</td></tr>
+<tr><td class="rn">175</td><td class="c win"><span class="alias">pend</span> <span class="addr">30003fd6</span>  pop {r4, pc}</td><td class="c"></td></tr>
+<tr class="frame"><td colspan="3"><b>z_impl_k_sem_take</b> &nbsp;|&nbsp; z_impl_k_sem_give</td></tr>
+<tr><td class="rn">176</td><td class="c win"><span class="alias">take</span> <span class="addr">30003a7e</span>  b.n 30003a68 &lt;z_impl_k_sem_take+0x24&gt;</td><td class="c"></td></tr>
+<tr><td class="rn">177</td><td class="c win"><span class="alias">take</span> <span class="addr">30003a68</span>  add sp, #8</td><td class="c"></td></tr>
+<tr><td class="rn">178</td><td class="c win"><span class="alias">take</span> <span class="addr">30003a6a</span>  pop {r4, pc}</td><td class="c"></td></tr>
+<tr class="frame"><td colspan="3"><b>H_Task_SA</b> &nbsp;|&nbsp; z_impl_k_sem_give</td></tr>
+<tr><td class="rn">179</td><td class="c win"><span class="alias">H_Task_SA</span> <span class="addr">300010e4</span>  ldr r3, [pc, #36]</td><td class="c"></td></tr>
+<tr class="frame"><td colspan="3">H_Task_SA &nbsp;|&nbsp; <b>H_Task_SB</b></td></tr>
+<tr><td class="rn">180</td><td class="c"><span class="badge">STOP</span><span class="alias">H_Task_SA</span> <span class="addr">300010e6</span>  ldr r2, [r3, #4]</td><td class="c"><span class="badge">STOP</span><span class="alias">H_Task_SB</span> <span class="addr">30001164</span>  ldr r2, [r4, #4]</td></tr>
+<tr><td class="rn">181</td><td class="c"><span class="alias">H_Task_SA</span> <span class="addr">300010e8</span>  ldr r3, [pc, #36]</td><td class="c"><span class="alias">H_Task_SB</span> <span class="addr">30001166</span>  ldr r3, [pc, #40]</td></tr>
+<tr><td class="rn">182</td><td class="c"><span class="alias">H_Task_SA</span> <span class="addr">300010ea</span>  str r2, [r3, #0]</td><td class="c"><span class="alias">H_Task_SB</span> <span class="addr">30001168</span>  str r2, [r3, #0]</td></tr>
+</tbody></table></div>
+<div class="prov"><h3>Build configuration</h3><dl>
+<dt>Compiler</dt><dd><code>arm-none-eabi-gcc 14.2.1</code>, <code>-Og</code> (<code>CONFIG_DEBUG_OPTIMIZATIONS=y</code>), <code>-mcpu=cortex-m33 -mthumb -mabi=aapcs</code></dd>
+<dt>Linker script</dt><dd>generated <code>zephyr/linker.cmd</code> for <code>frdm_mcxn947/mcxn947/cpu0</code>, <code>CONFIG_XIP=n</code></dd>
+<dt>Kernel config</dt><dd><code>CONFIG_SCHED_SIMPLE=y</code>, <code>CONFIG_SCHED_MULTIQ=n</code>, <code>CONFIG_WAITQ_SIMPLE=y</code>, <code>CONFIG_USE_SWITCH=n</code>, <code>CONFIG_TIMESLICING=n</code>, <code>CONFIG_EVENTS=y</code>, <code>CONFIG_TICKLESS_KERNEL=y</code>, <code>CONFIG_POLL=n</code></dd>
+<dt>Extraction</dt><dd><code>arm-none-eabi-objdump -d --no-show-raw-insn</code> of the linked <code>zephyr.elf</code>. A walker follows fall-through, <code>b</code>, <code>bl</code>, <code>bx lr</code> and <code>pop {.., pc}</code> itself; the text of every row is read back from the listing.</dd>
+<dt>Alignment</dt><dd>Caller rows and the rows from STOP on are paired role by role; the rows between are paired by a sequence diff over (function, offset).</dd>
+<dt>Path</dt><dd><b>From the binary:</b> instructions, addresses, branch targets, call and return order. <b>Assumed:</b> the outcome of each conditional branch, from the state stated above: wait queue holds the woken waiter only; its timeout is not linked and not being announced; it is not queued and not active elsewhere; run queue contents as in the table; <code>_current</code> is runnable and preemptible; key 0, thread context; <code>S_A</code> switches at the <code>msr BASEPRI</code> in <code>z_swap_irqlock()</code> and <code>H_Task_SA</code> resumes on the following <code>isb</code>. <b>Not measured:</b> nothing on this page was recorded on hardware.</dd>
+<dt>Cost</dt><dd>Instruction counts only. Arm publishes no per-instruction cycle table for Armv8-M, so cost has to be measured differentially on the target.</dd>
+</dl></div>
+</main>
+</body></html>

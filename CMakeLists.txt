@@ -34,7 +34,12 @@ target_sources_ifdef(CONFIG_BENCHMARK_TEST_TASK_SWITCHING_EVENT_PREEMPT app PRIV
                      src/task_switching/event_preempt/zephyr_sim.c)
 
 target_sources_ifdef(CONFIG_BENCHMARK_TEST_TASK_SWITCHING_SEM_PREEMPT app PRIVATE
-                     src/task_switching/sem_preempt/time_task_switch_sem.c)
+                     src/task_switching/sem_preempt/time_task_switch_sem.c
+                     src/task_switching/sem_preempt/zephyr_sim.c)
+
+target_sources_ifdef(CONFIG_BENCHMARK_TEST_TASK_SWITCHING_SEM_BLOCK app PRIVATE
+                     src/task_switching/sem_block/time_task_switch_sem.c
+                     src/task_switching/sem_block/zephyr_sim.c)
 
 target_sources_ifdef(CONFIG_BENCHMARK_TEST_TASK_SWITCHING_EVENT_BLOCK app PRIVATE
                      src/task_switching/event_block/time_task_switch_event.c
@@ -84,6 +89,8 @@ target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_TASK_SWITCHING_EVENT_BLOC
                            src/task_switching/event_block)
 target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_TASK_SWITCHING_SEM_PREEMPT app PRIVATE
                            src/task_switching/sem_preempt)
+target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_TASK_SWITCHING_SEM_BLOCK app PRIVATE
+                           src/task_switching/sem_block)
 target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_IRT app PRIVATE
                            src/irt)
 target_include_directories_ifdef(CONFIG_BENCHMARK_TEST_ITC_MAILBOX_ASYNC app PRIVATE

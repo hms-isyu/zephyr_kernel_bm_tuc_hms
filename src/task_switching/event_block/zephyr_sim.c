@@ -49,6 +49,9 @@ static volatile uint32_t sim_guard = 0x20U;
 static volatile uint32_t sim_wait_request = 0x1U;
 static volatile uint32_t sim_sink         = 0U;
 static volatile uint32_t sim_wait_sink    = 0U;
+/* Read through a volatile so the key reaches the simulated reschedule as a
+ * runtime value, as the key of k_spin_lock() reaches z_reschedule(). */
+static volatile uint32_t sim_post_key = 0U;
 
 /*******************************************************************************
  * Swap chain simulation
@@ -321,6 +324,98 @@ void measure_wait_tail_no_wait_overhead(BMTH_measurement_series_t *mseries,
   for (uint32_t i = 0; i < loop_count; i++)
   {
     measure_wait_tail(mseries, K_NO_WAIT);
+  }
+}
+
+/*******************************************************************************
+ * Post chain simulation
+ ******************************************************************************/
+
+/* reschedule() in kernel/sched.c. The swap arm is the one L_Task_SA left the
+ * CPU in; the counter starts in sim_z_swap_irqlock_tail(), where PendSV
+ * returns. */
+SIM_FRAME static void sim_reschedule_swap_tail(struct k_spinlock *lock,
+                                               uint32_t           key)
+{
+  ARG_UNUSED(lock);
+
+  if ((key == 0U) && (__get_IPSR() == 0U)
+      && (_sim_kernel.ready_q.cache != _sim_kernel.cpus[0].current))
+  {
+    (void) sim_z_swap_irqlock_tail(key);
+  }
+  else
+  {
+    irq_unlock(key);
+  }
+}
+
+/* z_reschedule() in kernel/sched.c, the wrapper k_event_post() calls. */
+SIM_FRAME static void sim_z_reschedule_swap_tail(struct k_spinlock *lock,
+                                                 uint32_t           key)
+{
+  sim_reschedule_swap_tail(lock, key);
+}
+
+/* k_event_post_internal() in kernel/events.c, waiter woken. Only the return
+ * after z_reschedule() is inside the window; the clobbers give the frame the
+ * kernel's push {r4, r5, r6, lr}. */
+SIM_FRAME static uint32_t sim_k_event_post_internal_swap_tail(
+  struct k_event *event, uint32_t events, uint32_t events_mask)
+{
+  volatile uint32_t data[2];
+  uint32_t          previous_events;
+
+  ARG_UNUSED(events);
+  ARG_UNUSED(events_mask);
+
+  __asm volatile("" ::: "r4", "r5", "r6");
+
+  data[0]         = sim_guard;
+  data[1]         = 0U;
+  previous_events = data[0];
+  event->events   = data[0] & ~data[1];
+
+  sim_z_reschedule_swap_tail(&event->lock, sim_post_key);
+
+  return previous_events;
+}
+
+SIM_FRAME static uint32_t sim_z_impl_k_event_post_swap_tail(
+  struct k_event *event, uint32_t events)
+{
+  return sim_k_event_post_internal_swap_tail(event, events, events);
+}
+
+SIM_ALWAYS_INLINE static inline void measure_post_tail(
+  BMTH_measurement_series_t *mseries)
+{
+  BMTH_mwindow_open(mseries);
+  BMTH_RESET_CNTR();
+
+  uint32_t rv = sim_z_impl_k_event_post_swap_tail(&tail_event, 0U);
+  BMTH_GET_STOP_CNT(sim_test_stop_time);
+  sim_sink = rv;
+
+  if (BMTH_mseries_iterate(mseries, sim_test_start_time, sim_test_stop_time)
+      == BMTH_MEASUREMENT_WINDOW_COMPLETED_WITH_JITTER)
+  {
+    BMTH_signalize_jitter_detected();
+  }
+  BMTH_mwindow_close(mseries);
+}
+
+void measure_post_tail_overhead(BMTH_measurement_series_t *mseries,
+                                uint32_t                   loop_count)
+{
+  sim_kernel_init();
+
+  BMTH_mseries_initialize(
+    mseries, 0, NULL,
+    BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
+  for (uint32_t i = 0; i < loop_count; i++)
+  {
+    measure_post_tail(mseries);
   }
 }
 

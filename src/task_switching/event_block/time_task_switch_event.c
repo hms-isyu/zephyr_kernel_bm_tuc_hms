@@ -54,6 +54,8 @@ static BMTH_measurement_series_t wait_tail_no_wait = {
   .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
 static BMTH_measurement_series_t z_swap_overhead = {
   .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
+static BMTH_measurement_series_t post_tail = {
+  .values_buffer_size = 0, .values_buffer = NULL, .iteration_count = 0};
 
 /* Possible overhead values measurement */
 static uint32_t test_dwta_ov =
@@ -289,11 +291,14 @@ int main(void)
     &scenario_b, 0, NULL,
     BMTH_MEASUREMENT_READ_WINDOW_INSIDE_FUNCTION_FILE_SCOPE_VARS);
 
-  /* The swap chain up to the irq_unlock() where PendSV would fire. */
+  /* S_A: the swap chain up to the irq_unlock() where PendSV would fire. */
   measure_event_z_swap_overhead(&z_swap_overhead, MEASUREMENT_COUNT,
                                 SIM_Z_SWAP_PROLOGUE);
 
-  /* The K_NO_WAIT wait, which returns without ever pending. */
+  /* S_A: the k_event_post() tail of L_Task_SA, after it regains the CPU. */
+  measure_post_tail_overhead(&post_tail, MEASUREMENT_COUNT);
+
+  /* S_B: the K_NO_WAIT wait, which returns without ever pending. */
   measure_wait_tail_no_wait_overhead(&wait_tail_no_wait, MEASUREMENT_COUNT);
 
   BMTH_signalize_mseries_start();
