@@ -35,8 +35,13 @@ static const struct gpio_dt_spec led2 = GPIO_DT_SPEC_GET(DT_ALIAS(led2), gpios);
  * Code
  ******************************************************************************/
 
-void BMTH_hardware_init(void)
+void BMTH_hardware_init(bool quiet)
 {
+  if (quiet)
+  {
+    BMTH_disable_noise_sources();
+  }
+
   /*done by board early init hook just check*/
 
   BMTH_ASSERT(gpio_is_ready_dt(&led0));

@@ -335,7 +335,7 @@ static void I_Task(void *p1, void *p2, void *p3)
  */
 int main(void)
 {
-  BMTH_hardware_init();
+  BMTH_hardware_init(true);
 
   BMTH_ENABLE_COUNTERS();
 

@@ -8,6 +8,13 @@ cmake_minimum_required(VERSION 3.20.0)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(bmt_zephyr)
 
+# Frame buffer at 0x30030000 (RAM-E), data, bss and noinit at 0x30033000
+# (RAM-E). Layout: boards/linker_layout.md.
+zephyr_linker_sources(RAM_SECTIONS boards/zephyr_ram_start.ld)
+# Vector table at 0x30000000, rodata at 0x30000400 (RAM-A), text at
+# 0x30008000 (RAM-B).
+zephyr_linker_sources(ROM_START SORT_KEY zzz boards/zephyr_rom_start.ld)
+
 target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
                                       ${CMAKE_CURRENT_SOURCE_DIR}/src/task_switching
                                       ${CMAKE_CURRENT_SOURCE_DIR}/src/zephyr_api_simulation)

@@ -17,6 +17,20 @@
 
 /* Memory configuration */
 
+/*
+ * Frame buffer, same range as BUFFERS_RAM_E in the ETX build (RAM_E_START
+ * 0x30030000, FRAME_BUFFER_LENGTH 12 KB; the sram ranges map child 0x20000000
+ * to 0x30000000). Becomes the NOLOAD linker region and output section
+ * BUFFERS_RAM_E; boards/zephyr_ram_start.ld reserves the same window inside RAM.
+ */
+&sram {
+	frame_buf: memory@20030000 {
+		compatible = "zephyr,memory-region", "mmio-sram";
+		reg = <0x20030000 0x3000>;
+		zephyr,memory-region = "BUFFERS_RAM_E";
+	};
+};
+
 /* Code is linked into System Bus (CONFIG_XIP=n), so the MPU must treat it as flash. */
 &sramx {
 	zephyr,memory-attr = <DT_MEM_ARM(ATTR_MPU_FLASH)>;
