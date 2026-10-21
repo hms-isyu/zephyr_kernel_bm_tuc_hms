@@ -46,13 +46,17 @@ static BMTH_time_marker_t test_start_time           = 0U;
 static BMTH_time_marker_t test_stop_time_direct     = 0U;
 static BMTH_time_marker_t test_stop_time_rendezvous = 0U;
 
-static BMTH_measurement_series_t send_to_higher_prio[MESSAGE_SIZE_STEPS];
-static BMTH_measurement_series_t rendezvous_to_higher_prio[MESSAGE_SIZE_STEPS];
-static BMTH_measurement_series_t send_to_lower_prio[MESSAGE_SIZE_STEPS];
-static BMTH_measurement_series_t rendezvous_to_lower_prio[MESSAGE_SIZE_STEPS];
+static BMTH_measurement_series_t
+  send_to_higher_prio[MESSAGE_SIZE_STEPS] BMTH_BUFFER_SECTION;
+static BMTH_measurement_series_t
+  rendezvous_to_higher_prio[MESSAGE_SIZE_STEPS] BMTH_BUFFER_SECTION;
+static BMTH_measurement_series_t
+  send_to_lower_prio[MESSAGE_SIZE_STEPS] BMTH_BUFFER_SECTION;
+static BMTH_measurement_series_t
+  rendezvous_to_lower_prio[MESSAGE_SIZE_STEPS] BMTH_BUFFER_SECTION;
 
-static uint8_t tx_buffer[MESSAGE_SIZE_MAX] __aligned(4);
-static uint8_t rx_buffer[MESSAGE_SIZE_MAX] __aligned(4);
+static uint8_t tx_buffer[MESSAGE_SIZE_MAX] BMTH_BUFFER_SECTION __aligned(4);
+static uint8_t rx_buffer[MESSAGE_SIZE_MAX] BMTH_BUFFER_SECTION __aligned(4);
 
 struct k_event test_event;
 struct k_sem   test_arm_sem;

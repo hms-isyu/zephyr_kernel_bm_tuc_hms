@@ -54,12 +54,15 @@
 static BMTH_time_marker_t test_start_time = 0U;
 static BMTH_time_marker_t test_stop_time  = 0U;
 
-static BMTH_measurement_series_t self_send[MESSAGE_SIZE_STEPS];
-static BMTH_measurement_series_t send_to_higher_prio[MESSAGE_SIZE_STEPS];
-static BMTH_measurement_series_t send_to_lower_prio[MESSAGE_SIZE_STEPS];
+static BMTH_measurement_series_t
+  self_send[MESSAGE_SIZE_STEPS] BMTH_BUFFER_SECTION;
+static BMTH_measurement_series_t
+  send_to_higher_prio[MESSAGE_SIZE_STEPS] BMTH_BUFFER_SECTION;
+static BMTH_measurement_series_t
+  send_to_lower_prio[MESSAGE_SIZE_STEPS] BMTH_BUFFER_SECTION;
 
-static uint8_t tx_buffer[MESSAGE_SIZE_MAX] __aligned(4);
-static uint8_t rx_buffer[MESSAGE_SIZE_MAX] __aligned(4);
+static uint8_t tx_buffer[MESSAGE_SIZE_MAX] BMTH_BUFFER_SECTION __aligned(4);
+static uint8_t rx_buffer[MESSAGE_SIZE_MAX] BMTH_BUFFER_SECTION __aligned(4);
 
 struct k_event test_event;
 struct k_sem   test_arm_sem;
@@ -71,9 +74,12 @@ static struct k_pipe test_pipe_self;
 static struct k_pipe test_pipe_high;
 static struct k_pipe test_pipe_low;
 
-static uint8_t pipe_buffer_self[PIPE_BUFFER_SIZE] __aligned(4);
-static uint8_t pipe_buffer_high[PIPE_BUFFER_SIZE] __aligned(4);
-static uint8_t pipe_buffer_low[PIPE_BUFFER_SIZE] __aligned(4);
+static uint8_t pipe_buffer_self[PIPE_BUFFER_SIZE] BMTH_BUFFER_SECTION
+  __aligned(4);
+static uint8_t pipe_buffer_high[PIPE_BUFFER_SIZE] BMTH_BUFFER_SECTION
+  __aligned(4);
+static uint8_t pipe_buffer_low[PIPE_BUFFER_SIZE] BMTH_BUFFER_SECTION
+  __aligned(4);
 
 /* Set by the releaser, read by the sender after it takes the baton. The sender
  * blocks on the receiver gate and the baton rather than inside the pipe, so

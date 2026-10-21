@@ -44,8 +44,8 @@ static struct k_mem_slab test_slab;
 
 /* The arena: MEM_ARENA_SIZE, the same storage every adapter in the
  * comparison declares. A slab keeps no header or table, so all of it is
- * available to pieces. */
-static uint8_t arena[MEM_ARENA_SIZE] __noinit __aligned(8);
+ * available to pieces. 64-byte aligned. */
+static uint8_t arena[MEM_ARENA_SIZE] BMTH_BUFFER_SECTION __aligned(64);
 
 /*******************************************************************************
  * Code

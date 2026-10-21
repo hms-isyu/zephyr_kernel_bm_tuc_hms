@@ -54,11 +54,14 @@ typedef struct
 static BMTH_time_marker_t test_start_time = 0U;
 static BMTH_time_marker_t test_stop_time  = 0U;
 
-static BMTH_measurement_series_t self_send[MESSAGE_SIZE_STEPS];
-static BMTH_measurement_series_t send_to_higher_prio[MESSAGE_SIZE_STEPS];
-static BMTH_measurement_series_t send_to_lower_prio[MESSAGE_SIZE_STEPS];
+static BMTH_measurement_series_t
+  self_send[MESSAGE_SIZE_STEPS] BMTH_BUFFER_SECTION;
+static BMTH_measurement_series_t
+  send_to_higher_prio[MESSAGE_SIZE_STEPS] BMTH_BUFFER_SECTION;
+static BMTH_measurement_series_t
+  send_to_lower_prio[MESSAGE_SIZE_STEPS] BMTH_BUFFER_SECTION;
 
-static test_item_t test_item __aligned(4);
+static test_item_t test_item BMTH_BUFFER_SECTION __aligned(4);
 static test_item_t          *rx_item = NULL;
 
 struct k_event test_event;

@@ -54,11 +54,14 @@ typedef struct
 static BMTH_time_marker_t test_start_time = 0U;
 static BMTH_time_marker_t test_stop_time  = 0U;
 
-static BMTH_measurement_series_t self_send[MESSAGE_SIZE_STEPS];
-static BMTH_measurement_series_t send_to_higher_prio[MESSAGE_SIZE_STEPS];
-static BMTH_measurement_series_t send_to_lower_prio[MESSAGE_SIZE_STEPS];
+static BMTH_measurement_series_t
+  self_send[MESSAGE_SIZE_STEPS] BMTH_BUFFER_SECTION;
+static BMTH_measurement_series_t
+  send_to_higher_prio[MESSAGE_SIZE_STEPS] BMTH_BUFFER_SECTION;
+static BMTH_measurement_series_t
+  send_to_lower_prio[MESSAGE_SIZE_STEPS] BMTH_BUFFER_SECTION;
 
-static test_item_t test_item __aligned(4);
+static test_item_t test_item BMTH_BUFFER_SECTION __aligned(4);
 static test_item_t          *rx_item = NULL;
 
 struct k_event test_event;
@@ -118,7 +121,7 @@ static void T_Self(void *p1, void *p2, void *p3)
       BMTH_RESET_COUNTER();
       BMTH_GET_START_CNT(test_start_time);
       k_fifo_put(&test_fifo_self, &test_item);
-      rx_item = k_fifo_get(&test_fifo_self, K_FOREVER);
+      rx_item = k_fifo_get(&test_fifo_self, K_NO_WAIT);
       BMTH_GET_STOP_CNT(test_stop_time);
       if (BMTH_mseries_iterate(&self_send[step], test_start_time,
                                test_stop_time)

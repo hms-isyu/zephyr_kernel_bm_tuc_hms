@@ -36,6 +36,14 @@
 
 #define MSGQ_MAX_MSGS (1U)
 
+/* One direction's storage holds every step's slice, largest step first, so a
+ * slice starts at a multiple of its own size. */
+#define MSGQ_BUFFER_SIZE                                                       \
+  (MESSAGE_SIZE_MIN * ((1U << MESSAGE_SIZE_STEPS) - 1U) * MSGQ_MAX_MSGS)
+#define MSGQ_BUFFER_OFFSET(step)                                               \
+  (MESSAGE_SIZE_MIN * ((1U << MESSAGE_SIZE_STEPS) - (2U << (step))) *         \
+   MSGQ_MAX_MSGS)
+
 #define START_SELF_EVENT_MASK 0x0001U
 #define START_UP_EVENT_MASK 0x0002U
 #define START_DOWN_EVENT_MASK 0x0004U
@@ -50,12 +58,15 @@
 static BMTH_time_marker_t test_start_time = 0U;
 static BMTH_time_marker_t test_stop_time  = 0U;
 
-static BMTH_measurement_series_t self_send[MESSAGE_SIZE_STEPS];
-static BMTH_measurement_series_t send_to_higher_prio[MESSAGE_SIZE_STEPS];
-static BMTH_measurement_series_t send_to_lower_prio[MESSAGE_SIZE_STEPS];
+static BMTH_measurement_series_t
+  self_send[MESSAGE_SIZE_STEPS] BMTH_BUFFER_SECTION;
+static BMTH_measurement_series_t
+  send_to_higher_prio[MESSAGE_SIZE_STEPS] BMTH_BUFFER_SECTION;
+static BMTH_measurement_series_t
+  send_to_lower_prio[MESSAGE_SIZE_STEPS] BMTH_BUFFER_SECTION;
 
-static uint8_t tx_buffer[MESSAGE_SIZE_MAX] __aligned(4);
-static uint8_t rx_buffer[MESSAGE_SIZE_MAX] __aligned(4);
+static uint8_t tx_buffer[MESSAGE_SIZE_MAX] BMTH_BUFFER_SECTION __aligned(4);
+static uint8_t rx_buffer[MESSAGE_SIZE_MAX] BMTH_BUFFER_SECTION __aligned(4);
 
 struct k_event test_event;
 struct k_sem   test_arm_sem;
@@ -65,12 +76,9 @@ static struct k_msgq test_msgq_self[MESSAGE_SIZE_STEPS];
 static struct k_msgq test_msgq_high[MESSAGE_SIZE_STEPS];
 static struct k_msgq test_msgq_low[MESSAGE_SIZE_STEPS];
 
-static char msgq_buffer_self[MESSAGE_SIZE_STEPS]
-                            [MESSAGE_SIZE_MAX * MSGQ_MAX_MSGS] __aligned(4);
-static char msgq_buffer_high[MESSAGE_SIZE_STEPS]
-                            [MESSAGE_SIZE_MAX * MSGQ_MAX_MSGS] __aligned(4);
-static char msgq_buffer_low[MESSAGE_SIZE_STEPS]
-                           [MESSAGE_SIZE_MAX * MSGQ_MAX_MSGS] __aligned(4);
+static char msgq_buffer_self[MSGQ_BUFFER_SIZE] BMTH_BUFFER_SECTION __aligned(4);
+static char msgq_buffer_high[MSGQ_BUFFER_SIZE] BMTH_BUFFER_SECTION __aligned(4);
+static char msgq_buffer_low[MSGQ_BUFFER_SIZE] BMTH_BUFFER_SECTION __aligned(4);
 
 /* Set by the releaser, read by the sender after it takes the baton. The sender
  * blocks on the receiver gate and the baton rather than on a queue, so both
@@ -294,11 +302,14 @@ static void I_Task(void *p1, void *p2, void *p3)
   {
     size_t message_size = (size_t) (MESSAGE_SIZE_MIN << step);
 
-    k_msgq_init(&test_msgq_self[step], msgq_buffer_self[step], message_size,
+    k_msgq_init(&test_msgq_self[step],
+                &msgq_buffer_self[MSGQ_BUFFER_OFFSET(step)], message_size,
                 MSGQ_MAX_MSGS);
-    k_msgq_init(&test_msgq_high[step], msgq_buffer_high[step], message_size,
+    k_msgq_init(&test_msgq_high[step],
+                &msgq_buffer_high[MSGQ_BUFFER_OFFSET(step)], message_size,
                 MSGQ_MAX_MSGS);
-    k_msgq_init(&test_msgq_low[step], msgq_buffer_low[step], message_size,
+    k_msgq_init(&test_msgq_low[step],
+                &msgq_buffer_low[MSGQ_BUFFER_OFFSET(step)], message_size,
                 MSGQ_MAX_MSGS);
   }
 

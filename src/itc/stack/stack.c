@@ -50,11 +50,15 @@
 static BMTH_time_marker_t test_start_time = 0U;
 static BMTH_time_marker_t test_stop_time  = 0U;
 
-static BMTH_measurement_series_t self_send[MESSAGE_SIZE_STEPS];
-static BMTH_measurement_series_t send_to_higher_prio[MESSAGE_SIZE_STEPS];
-static BMTH_measurement_series_t send_to_lower_prio[MESSAGE_SIZE_STEPS];
+static BMTH_measurement_series_t
+  self_send[MESSAGE_SIZE_STEPS] BMTH_BUFFER_SECTION;
+static BMTH_measurement_series_t
+  send_to_higher_prio[MESSAGE_SIZE_STEPS] BMTH_BUFFER_SECTION;
+static BMTH_measurement_series_t
+  send_to_lower_prio[MESSAGE_SIZE_STEPS] BMTH_BUFFER_SECTION;
 
-static uint8_t      test_item[MESSAGE_SIZE_MAX] __aligned(4);
+static uint8_t      test_item[MESSAGE_SIZE_MAX] BMTH_BUFFER_SECTION
+  __aligned(4);
 static stack_data_t rx_item = 0U;
 
 struct k_event test_event;
@@ -65,9 +69,9 @@ struct k_stack test_stack_self;
 struct k_stack test_stack_high;
 struct k_stack test_stack_low;
 
-static stack_data_t stack_array_self[STACK_MAX_ENTRIES];
-static stack_data_t stack_array_high[STACK_MAX_ENTRIES];
-static stack_data_t stack_array_low[STACK_MAX_ENTRIES];
+static stack_data_t stack_array_self[STACK_MAX_ENTRIES] BMTH_BUFFER_SECTION;
+static stack_data_t stack_array_high[STACK_MAX_ENTRIES] BMTH_BUFFER_SECTION;
+static stack_data_t stack_array_low[STACK_MAX_ENTRIES] BMTH_BUFFER_SECTION;
 
 K_THREAD_STACK_DEFINE(idle_stack, THREAD_STACK_SIZE);
 K_THREAD_STACK_DEFINE(t_self_stack, THREAD_STACK_SIZE);

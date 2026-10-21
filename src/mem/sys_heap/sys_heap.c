@@ -27,7 +27,7 @@
 static struct sys_heap test_heap;
 
 /*! The arena, sized MEM_ARENA_SIZE and shared by all steps and allocators. */
-static uint8_t arena[MEM_ARENA_SIZE] __noinit __aligned(8);
+static uint8_t arena[MEM_ARENA_SIZE] BMTH_BUFFER_SECTION __aligned(8);
 
 /*******************************************************************************
  * Code

@@ -45,7 +45,7 @@ BUILD_ASSERT((MEM_ARENA_SIZE & (MEM_ARENA_SIZE - 1U)) == 0U,
 /* The arena: MEM_ARENA_SIZE, the same storage every adapter in the
  * comparison declares. The bitmap lives beside the buffer, so all of the
  * array is available to pieces, as it is for the slab. */
-static uint8_t arena[MEM_ARENA_SIZE] __noinit __aligned(8);
+static uint8_t arena[MEM_ARENA_SIZE] BMTH_BUFFER_SECTION __aligned(8);
 
 /* One pool per step of the sweep, 2^MEM_S_MIN to 2^MEM_S_MAX bytes a piece. */
 SYS_MEM_BLOCKS_DEFINE_STATIC_WITH_EXT_BUF(pool_s3, 8, MB_BLOCKS_AT(3), arena);

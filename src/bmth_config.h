@@ -23,6 +23,12 @@
 
 #include "cmsis_core.h"
 
+#ifdef __ZEPHYR__
+#include <zephyr/devicetree.h>
+#include <zephyr/linker/devicetree_regions.h>
+#include <zephyr/toolchain.h>
+#endif /* __ZEPHYR__ */
+
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
@@ -48,6 +54,19 @@
 #define BMTH_MEM_S_MAX (10U)
 
 #define BMTH_MEM_ARENA_MULTIPLIER (8U)
+
+#ifdef __ZEPHYR__
+/** @brief Devicetree node that provides the BUFFERS_RAM_E region. */
+#define BMTH_BUFFER_NODE DT_NODELABEL(frame_buf)
+
+#if DT_NODE_HAS_PROP(BMTH_BUFFER_NODE, zephyr_memory_region)
+/** @brief Places a test buffer in the BUFFERS_RAM_E output section. */
+#define BMTH_BUFFER_SECTION                                                    \
+  Z_GENERIC_SECTION(LINKER_DT_NODE_REGION_NAME_TOKEN(BMTH_BUFFER_NODE))
+#else
+#error "No frame_buf node with zephyr,memory-region (BUFFERS_RAM_E)"
+#endif
+#endif /* __ZEPHYR__ */
 
 #endif /* BMTH_CONFIG_H */
 
