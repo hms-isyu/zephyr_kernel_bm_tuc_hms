@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# The SDK drives the C standard through raw -std flags and leaves
-# CMAKE_C_STANDARD unset.
-set(CMAKE_C_STANDARD 11)
+# C dialect gnu17, matching ETX. Zephyr emits -std=gnu17 from
+# CONFIG_STD_C17 with CONFIG_GNU_C_EXTENSIONS=y. CMAKE_C_STANDARD 17
+# (extensions on by default) makes CMake append a second -std=gnu17, as on ETX.
+set(CMAKE_C_STANDARD 17)
 
 cmake_minimum_required(VERSION 3.20.0)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
